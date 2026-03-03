@@ -64,6 +64,16 @@ class ValidationResultStatus(models.TextChoices):
     FAIL = "fail", "Fail"
 
 
+class PHBoundary(models.Model):
+    name = models.CharField(max_length=64, unique=True, default="philippines")
+    geometry = models.MultiPolygonField(srid=4326, spatial_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+
 class Dataset(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255)
