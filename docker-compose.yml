@@ -1,0 +1,59 @@
+version: "3.9"
+
+services:
+
+  db:
+    image: postgis/postgis:15-3.3
+    container_name: opendroneph_db
+    environment:
+      POSTGRES_DB: opendroneph
+      POSTGRES_USER: opendroneph
+      POSTGRES_PASSWORD: opendroneph
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio
+    container_name: opendroneph_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  titiler:
+    image: ghcr.io/developmentseed/titiler:latest
+    container_name: opendroneph_titiler
+    ports:
+      - "8001:8000"
+
+  backend:
+    build: ./apps/backend
+    container_name: opendroneph_backend
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./apps/backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - minio
+
+  web:
+    build: ./apps/web
+    container_name: opendroneph_web
+    command: npm run dev -- --host
+    volumes:
+      - ./apps/web:/app
+    ports:
+      - "5173:5173"
+
+volumes:
+  pgdata:
+  minio_data:
