@@ -10,19 +10,19 @@ class UserAdmin(DjangoUserAdmin):
     list_display = (
         "email",
         "display_username",
-        "contribution_count",
+        "contribution_count_display",
         "is_email_verified",
         "is_staff",
         "is_superuser",
         "created_at",
     )
     search_fields = ("email",)
-    readonly_fields = ("contribution_count", "created_at", "updated_at", "last_login", "date_joined")
+    readonly_fields = ("contribution_count_display", "created_at", "updated_at", "last_login", "date_joined")
     fieldsets = (
         (None, {"fields": ("email", "password")}),
         (
             "Profile",
-            {"fields": ("contribution_count", "is_email_verified", "created_at", "updated_at")},
+            {"fields": ("contribution_count_display", "is_email_verified", "created_at", "updated_at")},
         ),
         (
             "Permissions",
@@ -46,3 +46,7 @@ class UserAdmin(DjangoUserAdmin):
     @admin.display(description="Username")
     def display_username(self, obj):
         return obj.email.split("@", 1)[0]
+
+    @admin.display(description="Contribution Count", ordering="contribution_count")
+    def contribution_count_display(self, obj):
+        return getattr(obj, "contribution_count", 0)
