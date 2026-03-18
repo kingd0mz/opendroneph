@@ -24,6 +24,40 @@ class ValidationResult:
     details: dict
 
 
+def inspect_strict_cog(file_path: str | Path) -> ValidationResult:
+    path = str(file_path)
+    details: dict = {"check": "cog_strict", "path": path}
+    passed = True
+
+    try:
+        with rasterio.open(path) as src:
+            details["driver"] = src.driver
+            details["is_geotiff"] = src.driver == "GTiff"
+            details["is_tiled"] = bool(src.profile.get("tiled", False))
+            details["has_overviews"] = bool(src.count > 0 and src.overviews(1))
+            details["has_crs"] = src.crs is not None
+
+            # Ensure at least one read succeeds (no read errors).
+            src.read(1, window=Window(0, 0, 1, 1))
+            details["read_ok"] = True
+
+            passed = all(
+                [
+                    details["is_geotiff"],
+                    details["is_tiled"],
+                    details["has_overviews"],
+                    details["has_crs"],
+                    details["read_ok"],
+                ]
+            )
+    except (RasterioError, OSError, ValueError) as exc:
+        details["error"] = str(exc)
+        details["read_ok"] = False
+        passed = False
+
+    return ValidationResult(passed, details)
+
+
 def _create_validation_record(dataset: Dataset, validation_type: str, passed: bool, details: dict) -> ValidationRecord:
     status = ValidationResultStatus.PASS if passed else ValidationResultStatus.FAIL
     return ValidationRecord.objects.create(
@@ -55,40 +89,11 @@ def validate_ph_boundary_intersection(dataset: Dataset) -> ValidationResult:
 
 
 def validate_strict_cog(dataset: Dataset, file_path: str | Path) -> ValidationResult:
-    path = str(file_path)
-    details: dict = {"check": "cog_strict", "path": path}
-    passed = True
-
-    try:
-        with rasterio.open(path) as src:
-            details["driver"] = src.driver
-            details["is_geotiff"] = src.driver == "GTiff"
-            details["is_tiled"] = bool(src.profile.get("tiled", False))
-            details["has_overviews"] = bool(src.count > 0 and src.overviews(1))
-            details["has_crs"] = src.crs is not None
-
-            # Ensure at least one read succeeds (no read errors).
-            src.read(1, window=Window(0, 0, 1, 1))
-            details["read_ok"] = True
-
-            passed = all(
-                [
-                    details["is_geotiff"],
-                    details["is_tiled"],
-                    details["has_overviews"],
-                    details["has_crs"],
-                    details["read_ok"],
-                ]
-            )
-    except (RasterioError, OSError, ValueError) as exc:
-        details["error"] = str(exc)
-        details["read_ok"] = False
-        passed = False
-
-    _create_validation_record(dataset, ValidationType.COG_STRICT, passed, details)
-    dataset.validation_status = ValidationStatus.VALID if passed else ValidationStatus.INVALID
+    result = inspect_strict_cog(file_path)
+    _create_validation_record(dataset, ValidationType.COG_STRICT, result.passed, result.details)
+    dataset.validation_status = ValidationStatus.VALID if result.passed else ValidationStatus.INVALID
     dataset.save(update_fields=["validation_status", "updated_at"])
-    return ValidationResult(passed, details)
+    return result
 
 
 def run_dataset_validations(dataset: Dataset, file_path: str | Path | None = None) -> ValidationResult:
@@ -108,4 +113,3 @@ def run_dataset_validations(dataset: Dataset, file_path: str | Path | None = Non
     dataset.validation_status = ValidationStatus.VALID
     dataset.save(update_fields=["validation_status", "updated_at"])
     return ValidationResult(True, {"check": "dataset_validation", "message": "raw dataset boundary validation passed"})
-

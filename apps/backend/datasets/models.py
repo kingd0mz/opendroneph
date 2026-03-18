@@ -226,3 +226,26 @@ class ValidationRecord(models.Model):
 
     def __str__(self):
         return f"{self.dataset_id}:{self.validation_type}:{self.status}"
+
+
+class DownloadEvent(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    dataset = models.ForeignKey(
+        Dataset,
+        on_delete=models.PROTECT,
+        related_name="download_events",
+    )
+    asset = models.ForeignKey(
+        DatasetAsset,
+        on_delete=models.PROTECT,
+        related_name="download_events",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="download_events",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.dataset_id}:{self.asset_id}:{self.actor_id}"
