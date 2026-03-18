@@ -1,10 +1,12 @@
 from django.contrib.auth import login, logout
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from users.serializers import LoginSerializer
+from users.models import User
+from users.serializers import LeaderboardEntrySerializer, LoginSerializer, UserProfileSerializer
 
 
 def _user_payload(user):
@@ -41,3 +43,30 @@ class MeView(APIView):
 
     def get(self, request):
         return Response(_user_payload(request.user), status=status.HTTP_200_OK)
+
+
+class UserMeProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = User.objects.with_contributions().get(pk=request.user.pk)
+        serializer = UserProfileSerializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class UserProfileView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, user_id):
+        user = get_object_or_404(User.objects.with_contributions(), pk=user_id)
+        serializer = UserProfileSerializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class LeaderboardView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        leaderboard = User.objects.with_contributions().order_by("-contribution_count", "email")[:50]
+        serializer = LeaderboardEntrySerializer(leaderboard, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

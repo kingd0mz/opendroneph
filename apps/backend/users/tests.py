@@ -1,9 +1,43 @@
 import pytest
+from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from datasets.models import Dataset, DatasetStatus, DatasetType, LicenseType, PlatformType, ValidationStatus
 from users.models import User
+
+
+@pytest.fixture
+def footprint():
+    polygon = Polygon(
+        (
+            (120.8, 14.3),
+            (121.2, 14.3),
+            (121.2, 14.8),
+            (120.8, 14.8),
+            (120.8, 14.3),
+        ),
+        srid=4326,
+    )
+    return MultiPolygon(polygon, srid=4326)
+
+
+def _create_dataset(*, user: User, footprint: MultiPolygon, dataset_type: str, status_value: str, validation_status: str):
+    return Dataset.objects.create(
+        title=f"{dataset_type}-{status_value}",
+        description="Contribution test dataset",
+        uploader=user,
+        processor=user,
+        footprint=footprint,
+        type=dataset_type,
+        status=status_value,
+        validation_status=validation_status,
+        capture_date="2026-01-01",
+        platform_type=PlatformType.DRONE,
+        camera_model="Camera",
+        license_type=LicenseType.CC_BY,
+    )
 
 
 @pytest.mark.django_db
@@ -32,3 +66,146 @@ def test_me_requires_authenticated_session():
     response = client.get(reverse("auth-me"))
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_users_me_returns_contribution_count(footprint):
+    user = User.objects.create_user(
+        email="contributor@example.com",
+        password="testpass123",
+        is_email_verified=True,
+    )
+    _create_dataset(
+        user=user,
+        footprint=footprint,
+        dataset_type=DatasetType.RAW,
+        status_value=DatasetStatus.DRAFT,
+        validation_status=ValidationStatus.VALID,
+    )
+    _create_dataset(
+        user=user,
+        footprint=footprint,
+        dataset_type=DatasetType.ORTHOPHOTO,
+        status_value=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+    )
+    _create_dataset(
+        user=user,
+        footprint=footprint,
+        dataset_type=DatasetType.RAW,
+        status_value=DatasetStatus.HIDDEN,
+        validation_status=ValidationStatus.VALID,
+    )
+    _create_dataset(
+        user=user,
+        footprint=footprint,
+        dataset_type=DatasetType.RAW,
+        status_value=DatasetStatus.DRAFT,
+        validation_status=ValidationStatus.PENDING,
+    )
+
+    client = APIClient()
+    client.force_login(user)
+    response = client.get(reverse("user-me"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {
+        "id": str(user.id),
+        "username": "contributor",
+        "contribution_count": 2,
+    }
+
+
+@pytest.mark.django_db
+def test_with_contributions_queryset_annotation_is_reusable(footprint):
+    user = User.objects.create_user(email="alpha@example.com", password="testpass123")
+    _create_dataset(
+        user=user,
+        footprint=footprint,
+        dataset_type=DatasetType.RAW,
+        status_value=DatasetStatus.DRAFT,
+        validation_status=ValidationStatus.VALID,
+    )
+    _create_dataset(
+        user=user,
+        footprint=footprint,
+        dataset_type=DatasetType.ORTHOPHOTO,
+        status_value=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+    )
+    _create_dataset(
+        user=user,
+        footprint=footprint,
+        dataset_type=DatasetType.ORTHOPHOTO,
+        status_value=DatasetStatus.HIDDEN,
+        validation_status=ValidationStatus.VALID,
+    )
+
+    annotated_user = User.objects.with_contributions().get(email="alpha@example.com")
+
+    assert annotated_user.contribution_count == 2
+
+
+@pytest.mark.django_db
+def test_public_profile_returns_contribution_count(footprint):
+    user = User.objects.create_user(email="public@example.com", password="testpass123")
+    _create_dataset(
+        user=user,
+        footprint=footprint,
+        dataset_type=DatasetType.RAW,
+        status_value=DatasetStatus.DRAFT,
+        validation_status=ValidationStatus.VALID,
+    )
+
+    response = APIClient().get(reverse("user-profile", args=[user.id]))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["username"] == "public"
+    assert response.json()["contribution_count"] == 1
+
+
+@pytest.mark.django_db
+def test_leaderboard_returns_sorted_users(footprint):
+    top_user = User.objects.create_user(email="top@example.com", password="testpass123")
+    second_user = User.objects.create_user(email="second@example.com", password="testpass123")
+    third_user = User.objects.create_user(email="third@example.com", password="testpass123")
+
+    _create_dataset(
+        user=top_user,
+        footprint=footprint,
+        dataset_type=DatasetType.RAW,
+        status_value=DatasetStatus.DRAFT,
+        validation_status=ValidationStatus.VALID,
+    )
+    _create_dataset(
+        user=top_user,
+        footprint=footprint,
+        dataset_type=DatasetType.ORTHOPHOTO,
+        status_value=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+    )
+    _create_dataset(
+        user=second_user,
+        footprint=footprint,
+        dataset_type=DatasetType.RAW,
+        status_value=DatasetStatus.DRAFT,
+        validation_status=ValidationStatus.VALID,
+    )
+    _create_dataset(
+        user=third_user,
+        footprint=footprint,
+        dataset_type=DatasetType.ORTHOPHOTO,
+        status_value=DatasetStatus.HIDDEN,
+        validation_status=ValidationStatus.VALID,
+    )
+
+    response = APIClient().get(reverse("leaderboard"))
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert payload[0]["user_id"] == str(top_user.id)
+    assert payload[0]["contribution_count"] == 2
+    assert payload[1]["user_id"] == str(second_user.id)
+    assert payload[1]["contribution_count"] == 1
+    assert payload[2]["user_id"] == str(third_user.id)
+    assert payload[2]["contribution_count"] == 0

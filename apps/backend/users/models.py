@@ -3,8 +3,10 @@ import uuid
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
+from users.querysets import UserQuerySet
 
-class UserManager(BaseUserManager):
+
+class UserManager(BaseUserManager.from_queryset(UserQuerySet)):
     use_in_migrations = True
 
     def _create_user(self, email, password, **extra_fields):
