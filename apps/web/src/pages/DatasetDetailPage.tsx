@@ -15,6 +15,7 @@ import {
 } from "@mui/material";
 
 import { DatasetFootprintMap } from "../components/DatasetFootprintMap";
+import { useAuth } from "../context/AuthContext";
 import { FullscreenState } from "../components/FullscreenState";
 import { useDatasetDetail } from "../hooks/useDatasetDetail";
 import { navigate } from "../hooks/usePathname";
@@ -50,13 +51,14 @@ interface DatasetDetailPageProps {
 }
 
 export function DatasetDetailPage({ datasetId }: DatasetDetailPageProps) {
+  const { requireAuth } = useAuth();
   const { dataset, isLoading, error, statusCode } = useDatasetDetail(datasetId);
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
   const statusLabel = useMemo(() => dataset?.validationStatus.replace("_", " ") ?? "", [dataset?.validationStatus]);
 
-  async function handleDownload() {
+  async function performDownload() {
     if (!datasetId) {
       return;
     }
@@ -92,6 +94,10 @@ export function DatasetDetailPage({ datasetId }: DatasetDetailPageProps) {
     } finally {
       setIsDownloading(false);
     }
+  }
+
+  async function handleDownload() {
+    await requireAuth(performDownload);
   }
 
   if (isLoading) {
@@ -182,12 +188,12 @@ export function DatasetDetailPage({ datasetId }: DatasetDetailPageProps) {
                   Assets
                 </Typography>
                 <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                  Download is allowed only for published, valid datasets with downloadable assets.
+                  Published, valid datasets are publicly viewable. Download requires login.
                 </Typography>
               </Box>
               <Button
                 variant="contained"
-                onClick={handleDownload}
+                onClick={() => void handleDownload()}
                 disabled={isDownloading || dataset.assets.every((asset) => !asset.isDownloadable)}
               >
                 {isDownloading ? "Preparing Download..." : "Download Dataset"}
@@ -209,7 +215,7 @@ export function DatasetDetailPage({ datasetId }: DatasetDetailPageProps) {
                       secondaryAction={
                         <Button
                           variant="outlined"
-                          onClick={handleDownload}
+                          onClick={() => void handleDownload()}
                           disabled={isDownloading || !asset.isDownloadable}
                         >
                           Download

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
 
 import App from "./App";
+import { AuthProvider } from "./context/AuthContext";
 import "./index.css";
 
 const theme = createTheme({
@@ -32,8 +33,10 @@ const theme = createTheme({
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <App />
+      <AuthProvider>
+        <CssBaseline />
+        <App />
+      </AuthProvider>
     </ThemeProvider>
   </StrictMode>,
 );

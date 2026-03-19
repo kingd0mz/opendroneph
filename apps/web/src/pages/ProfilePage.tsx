@@ -1,6 +1,7 @@
-import { Box, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
+import { Box, Card, CardContent, Chip, Divider, List, ListItem, ListItemButton, ListItemText, Stack, Typography } from "@mui/material";
 
 import { FullscreenLoadingState, FullscreenState } from "../components/FullscreenState";
+import { navigate } from "../hooks/usePathname";
 import { useProfile } from "../hooks/useProfile";
 
 export function ProfilePage() {
@@ -57,8 +58,34 @@ export function ProfilePage() {
               }}
             />
             <Typography variant="body1" color="text.secondary">
-              Contribution counts are derived by the backend from valid raw uploads and published orthophotos.
+              Contributions are the user’s published, valid datasets that are visible to everyone.
             </Typography>
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
+                Contributions
+              </Typography>
+              {profile.contributions.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No public contributions yet.
+                </Typography>
+              ) : (
+                <List disablePadding>
+                  {profile.contributions.map((contribution, index) => (
+                    <Box key={contribution.id}>
+                      <ListItem disablePadding>
+                        <ListItemButton onClick={() => navigate(`/datasets/${contribution.id}`)}>
+                          <ListItemText
+                            primary={contribution.title}
+                            secondary={`${contribution.type} | ${new Date(contribution.created_at).toLocaleDateString()}`}
+                          />
+                        </ListItemButton>
+                      </ListItem>
+                      {index < profile.contributions.length - 1 ? <Divider /> : null}
+                    </Box>
+                  ))}
+                </List>
+              )}
+            </Box>
           </Stack>
         </CardContent>
       </Card>

@@ -61,7 +61,6 @@ def _make_dataset(user: User, footprint: MultiPolygon) -> Dataset:
         title="Test Dataset",
         description="Validation test dataset",
         uploader=user,
-        processor=user,
         footprint=footprint,
         type=DatasetType.ORTHOPHOTO,
         capture_date="2026-01-01",

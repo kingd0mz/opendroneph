@@ -28,7 +28,6 @@ def _create_dataset(*, user: User, footprint: MultiPolygon, dataset_type: str, s
         title=f"{dataset_type}-{status_value}",
         description="Contribution test dataset",
         uploader=user,
-        processor=user,
         footprint=footprint,
         type=dataset_type,
         status=status_value,
@@ -79,7 +78,7 @@ def test_users_me_returns_contribution_count(footprint):
         user=user,
         footprint=footprint,
         dataset_type=DatasetType.RAW,
-        status_value=DatasetStatus.DRAFT,
+        status_value=DatasetStatus.PUBLISHED,
         validation_status=ValidationStatus.VALID,
     )
     _create_dataset(
@@ -93,7 +92,7 @@ def test_users_me_returns_contribution_count(footprint):
         user=user,
         footprint=footprint,
         dataset_type=DatasetType.RAW,
-        status_value=DatasetStatus.HIDDEN,
+        status_value=DatasetStatus.PUBLISHED,
         validation_status=ValidationStatus.VALID,
     )
     _create_dataset(
@@ -103,6 +102,20 @@ def test_users_me_returns_contribution_count(footprint):
         status_value=DatasetStatus.DRAFT,
         validation_status=ValidationStatus.PENDING,
     )
+    expected_contributions = [
+        {
+            "id": str(dataset.id),
+            "title": dataset.title,
+            "type": dataset.type,
+            "status": dataset.status,
+            "validation_status": dataset.validation_status,
+            "created_at": dataset.created_at.isoformat().replace("+00:00", "Z"),
+        }
+        for dataset in user.uploaded_datasets.filter(
+            status=DatasetStatus.PUBLISHED,
+            validation_status=ValidationStatus.VALID,
+        ).order_by("-created_at")
+    ]
 
     client = APIClient()
     client.force_login(user)
@@ -112,7 +125,8 @@ def test_users_me_returns_contribution_count(footprint):
     assert response.json() == {
         "id": str(user.id),
         "username": "contributor",
-        "contribution_count": 2,
+        "contribution_count": 3,
+        "contributions": expected_contributions,
     }
 
 
@@ -123,7 +137,7 @@ def test_with_contributions_queryset_annotation_is_reusable(footprint):
         user=user,
         footprint=footprint,
         dataset_type=DatasetType.RAW,
-        status_value=DatasetStatus.DRAFT,
+        status_value=DatasetStatus.PUBLISHED,
         validation_status=ValidationStatus.VALID,
     )
     _create_dataset(
@@ -137,13 +151,13 @@ def test_with_contributions_queryset_annotation_is_reusable(footprint):
         user=user,
         footprint=footprint,
         dataset_type=DatasetType.ORTHOPHOTO,
-        status_value=DatasetStatus.HIDDEN,
+        status_value=DatasetStatus.PUBLISHED,
         validation_status=ValidationStatus.VALID,
     )
 
     annotated_user = User.objects.with_contributions().get(email="alpha@example.com")
 
-    assert annotated_user.contribution_count == 2
+    assert annotated_user.contribution_count == 3
 
 
 @pytest.mark.django_db
@@ -161,7 +175,7 @@ def test_public_profile_returns_contribution_count(footprint):
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["username"] == "public"
-    assert response.json()["contribution_count"] == 1
+    assert response.json()["contribution_count"] == 0
 
 
 @pytest.mark.django_db
@@ -174,7 +188,7 @@ def test_leaderboard_returns_sorted_users(footprint):
         user=top_user,
         footprint=footprint,
         dataset_type=DatasetType.RAW,
-        status_value=DatasetStatus.DRAFT,
+        status_value=DatasetStatus.PUBLISHED,
         validation_status=ValidationStatus.VALID,
     )
     _create_dataset(
@@ -188,14 +202,14 @@ def test_leaderboard_returns_sorted_users(footprint):
         user=second_user,
         footprint=footprint,
         dataset_type=DatasetType.RAW,
-        status_value=DatasetStatus.DRAFT,
+        status_value=DatasetStatus.PUBLISHED,
         validation_status=ValidationStatus.VALID,
     )
     _create_dataset(
         user=third_user,
         footprint=footprint,
         dataset_type=DatasetType.ORTHOPHOTO,
-        status_value=DatasetStatus.HIDDEN,
+        status_value=DatasetStatus.DELISTED,
         validation_status=ValidationStatus.VALID,
     )
 

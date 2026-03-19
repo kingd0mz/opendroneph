@@ -15,6 +15,33 @@ export class ApiError extends Error {
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   withCredentials: true,
+  withXSRFToken: true,
+  xsrfCookieName: "csrftoken",
+  xsrfHeaderName: "X-CSRFToken",
+});
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const cookie = document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(`${name}=`));
+
+  return cookie ? decodeURIComponent(cookie.split("=").slice(1).join("=")) : null;
+}
+
+api.interceptors.request.use((config) => {
+  const method = config.method?.toLowerCase();
+  if (method && ["post", "put", "patch", "delete"].includes(method)) {
+    const csrfToken = readCookie("csrftoken");
+    if (csrfToken) {
+      config.headers.set("X-CSRFToken", csrfToken);
+    }
+  }
+
+  return config;
 });
 
 api.interceptors.response.use(

@@ -3,9 +3,7 @@ from django.contrib import admin
 from datasets.models import (
     Dataset,
     DatasetAsset,
-    ModerationAction,
     PHBoundary,
-    RawAccessRequest,
     ValidationRecord,
 )
 
@@ -23,7 +21,7 @@ class DatasetAdmin(admin.ModelAdmin):
     )
     list_filter = ("type", "status", "validation_status")
     search_fields = ("title", "uploader__email")
-    readonly_fields = ("created_at", "updated_at", "published_at", "hidden_at")
+    readonly_fields = ("created_at", "updated_at", "published_at")
 
 
 @admin.register(DatasetAsset)
@@ -49,23 +47,6 @@ class ValidationRecordAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
-
-
-@admin.register(RawAccessRequest)
-class RawAccessRequestAdmin(admin.ModelAdmin):
-    list_display = ("id", "dataset", "requester", "status", "reviewed_by", "reviewed_at", "created_at")
-    list_filter = ("status",)
-    search_fields = ("dataset__title", "requester__email", "dataset__uploader__email")
-    readonly_fields = ("reviewed_at", "created_at", "updated_at")
-
-
-@admin.register(ModerationAction)
-class ModerationActionAdmin(admin.ModelAdmin):
-    list_display = ("id", "dataset", "actor", "action_type", "created_at")
-    list_filter = ("action_type",)
-    search_fields = ("dataset__title", "actor__email")
-    readonly_fields = ("created_at",)
-
 
 @admin.register(PHBoundary)
 class PHBoundaryAdmin(admin.ModelAdmin):

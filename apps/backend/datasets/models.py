@@ -3,7 +3,6 @@ import uuid
 from django.conf import settings
 from django.contrib.gis.db import models
 from django.contrib.postgres.indexes import GistIndex
-from django.db.models import Q
 
 
 class DatasetType(models.TextChoices):
@@ -14,7 +13,6 @@ class DatasetType(models.TextChoices):
 class DatasetStatus(models.TextChoices):
     DRAFT = "draft", "Draft"
     PUBLISHED = "published", "Published"
-    HIDDEN = "hidden", "Hidden"
     DELISTED = "delisted", "Delisted"
 
 
@@ -39,19 +37,6 @@ class DatasetAssetType(models.TextChoices):
     RAW_ARCHIVE = "raw_archive", "Raw Archive"
     ORTHOPHOTO_COG = "orthophoto_cog", "Orthophoto COG"
     MULTISPECTRAL_ARCHIVE = "multispectral_archive", "Multispectral Archive"
-
-
-class RawAccessRequestStatus(models.TextChoices):
-    PENDING = "pending", "Pending"
-    APPROVED = "approved", "Approved"
-    DENIED = "denied", "Denied"
-    REVOKED = "revoked", "Revoked"
-
-
-class ModerationActionType(models.TextChoices):
-    FLAG = "flag", "Flag"
-    HIDE = "hide", "Hide"
-    REINSTATE = "reinstate", "Reinstate"
 
 
 class ValidationType(models.TextChoices):
@@ -83,13 +68,6 @@ class Dataset(models.Model):
         on_delete=models.PROTECT,
         related_name="uploaded_datasets",
     )
-    processor = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="processed_datasets",
-        null=True,
-        blank=True,
-    )
     footprint = models.MultiPolygonField(srid=4326, spatial_index=True)
     type = models.CharField(max_length=20, choices=DatasetType.choices)
     status = models.CharField(
@@ -112,7 +90,6 @@ class Dataset(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     published_at = models.DateTimeField(null=True, blank=True)
-    hidden_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [
@@ -148,68 +125,6 @@ class DatasetAsset(models.Model):
 
     def __str__(self):
         return f"{self.dataset_id}:{self.asset_type}"
-
-
-class RawAccessRequest(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    dataset = models.ForeignKey(
-        Dataset,
-        on_delete=models.PROTECT,
-        related_name="raw_access_requests",
-    )
-    requester = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="raw_access_requests",
-    )
-    reason = models.TextField()
-    status = models.CharField(
-        max_length=20,
-        choices=RawAccessRequestStatus.choices,
-        default=RawAccessRequestStatus.PENDING,
-    )
-    reviewed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="reviewed_raw_access_requests",
-        null=True,
-        blank=True,
-    )
-    reviewed_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["dataset", "requester"],
-                condition=Q(status=RawAccessRequestStatus.PENDING),
-                name="uniq_pending_raw_access_request",
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.dataset_id}:{self.requester_id}:{self.status}"
-
-
-class ModerationAction(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    dataset = models.ForeignKey(
-        Dataset,
-        on_delete=models.PROTECT,
-        related_name="moderation_actions",
-    )
-    actor = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="moderation_actions",
-    )
-    action_type = models.CharField(max_length=20, choices=ModerationActionType.choices)
-    reason = models.TextField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.dataset_id}:{self.action_type}"
 
 
 class ValidationRecord(models.Model):

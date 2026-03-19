@@ -1,16 +1,34 @@
 import { AppBar, Box, Button, Stack, Toolbar, Typography } from "@mui/material";
 import type { PropsWithChildren } from "react";
 
+import { useAuth } from "../context/AuthContext";
 import { navigate, usePathname } from "../hooks/usePathname";
 
 export function MapShell({ children }: PropsWithChildren) {
   const pathname = usePathname();
+  const { isAuthenticated, loading, logout, openLoginModal, user } = useAuth();
 
   const links = [
     { label: "Map", to: "/" },
     { label: "Leaderboard", to: "/leaderboard" },
     { label: "Profile", to: "/profile" },
   ];
+
+  function handleNavigate(to: string) {
+    if (to === "/profile" && !isAuthenticated) {
+      openLoginModal(() => navigate(to));
+      return;
+    }
+
+    navigate(to);
+  }
+
+  async function handleLogout() {
+    await logout();
+    if (pathname === "/profile") {
+      navigate("/");
+    }
+  }
 
   return (
     <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
@@ -34,11 +52,16 @@ export function MapShell({ children }: PropsWithChildren) {
           <Typography variant="h6" component="h1">
             OpenDronePH
           </Typography>
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            {isAuthenticated && user ? (
+              <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.82)", mr: 1 }}>
+                {user.email}
+              </Typography>
+            ) : null}
             {links.map((link) => (
               <Button
                 key={link.to}
-                onClick={() => navigate(link.to)}
+                onClick={() => handleNavigate(link.to)}
                 color="inherit"
                 variant={pathname === link.to ? "outlined" : "text"}
                 sx={{
@@ -50,6 +73,29 @@ export function MapShell({ children }: PropsWithChildren) {
                 {link.label}
               </Button>
             ))}
+            {loading ? null : isAuthenticated ? (
+              <Button
+                onClick={() => void handleLogout()}
+                color="inherit"
+                variant="text"
+                sx={{ color: "common.white", fontWeight: 700 }}
+              >
+                Logout
+              </Button>
+            ) : (
+              <Button
+                onClick={() => openLoginModal()}
+                color="inherit"
+                variant="outlined"
+                sx={{
+                  borderColor: "rgba(255,255,255,0.34)",
+                  color: "common.white",
+                  fontWeight: 700,
+                }}
+              >
+                Login
+              </Button>
+            )}
           </Stack>
         </Toolbar>
       </AppBar>

@@ -47,9 +47,7 @@ function normalizeDatasetDetail(item: DatasetDetailApiItem): DatasetDetail {
 }
 
 export async function fetchPublishedDatasets(): Promise<Dataset[]> {
-  const response = await api.get<DatasetApiItem[]>("/datasets/", {
-    params: { status: "published" },
-  });
+  const response = await api.get<DatasetApiItem[]>("/datasets/");
 
   return response.data.map(normalizeDataset);
 }

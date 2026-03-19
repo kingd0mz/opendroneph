@@ -4,11 +4,9 @@ import os
 import tempfile
 from uuid import uuid4
 
-from django.db import IntegrityError
 from django.db.models import Q
-from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import generics, status, viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -20,19 +18,13 @@ from datasets.models import (
     DatasetStatus,
     DatasetType,
     DownloadEvent,
-    ModerationAction,
-    ModerationActionType,
-    RawAccessRequest,
-    RawAccessRequestStatus,
     ValidationStatus,
 )
-from datasets.permissions import IsModerator, IsVerifiedUser
 from datasets.serializers import (
     DatasetDetailSerializer,
     DatasetAssetSerializer,
     DatasetAssetUploadSerializer,
     DatasetSerializer,
-    RawAccessRequestSerializer,
 )
 from datasets.services.storage import generate_dataset_asset_download_url, upload_dataset_asset
 from datasets.services.validation import validate_ph_boundary_intersection, validate_strict_cog
@@ -40,7 +32,7 @@ from datasets.services.validation import validate_ph_boundary_intersection, vali
 
 class DatasetViewSet(viewsets.ModelViewSet):
     serializer_class = DatasetSerializer
-    queryset = Dataset.objects.select_related("uploader", "processor").prefetch_related("assets")
+    queryset = Dataset.objects.select_related("uploader").prefetch_related("assets")
     http_method_names = ["get", "post"]
 
     def get_serializer_class(self):
@@ -48,21 +40,26 @@ class DatasetViewSet(viewsets.ModelViewSet):
             return DatasetDetailSerializer
         return super().get_serializer_class()
 
+    def _visible_dataset_filter(self):
+        public_filter = Q(
+            status=DatasetStatus.PUBLISHED,
+            validation_status=ValidationStatus.VALID,
+        )
+        user = self.request.user
+        if user and user.is_authenticated:
+            return public_filter | Q(uploader=user)
+        return public_filter
+
     def get_queryset(self):
-        if self.action == "list":
-            return self.queryset.filter(
-                status=DatasetStatus.PUBLISHED,
-                validation_status=ValidationStatus.VALID,
-            )
+        if self.action in {"list", "retrieve"}:
+            return self.queryset.filter(self._visible_dataset_filter()).distinct()
         return self.queryset
 
     def get_permissions(self):
         if self.action in {"list", "retrieve"}:
             permission_classes = [AllowAny]
         elif self.action in {"create", "upload_asset", "download"}:
-            permission_classes = [IsVerifiedUser]
-        elif self.action in {"hide", "reinstate"}:
-            permission_classes = [IsModerator]
+            permission_classes = [IsAuthenticated]
         elif self.action == "publish":
             permission_classes = [IsAuthenticated]
         else:
@@ -77,23 +74,15 @@ class DatasetViewSet(viewsets.ModelViewSet):
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
     def retrieve(self, request, *args, **kwargs):
-        dataset = get_object_or_404(self.queryset, pk=kwargs["pk"])
-        is_public = (
-            dataset.status == DatasetStatus.PUBLISHED
-            and dataset.validation_status == ValidationStatus.VALID
-        )
-
-        if not is_public:
-            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-
+        dataset = self.get_object()
         serializer = self.get_serializer(dataset)
         return Response(serializer.data)
 
     @action(detail=True, methods=["post"], url_path="upload-asset")
     def upload_asset(self, request, pk=None):
         dataset = self.get_object()
-        if request.user != dataset.uploader and request.user != dataset.processor:
-            return Response({"detail": "Only the uploader or processor can upload assets."}, status=status.HTTP_403_FORBIDDEN)
+        if request.user != dataset.uploader:
+            return Response({"detail": "Only the uploader can upload assets."}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = DatasetAssetUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -136,7 +125,7 @@ class DatasetViewSet(viewsets.ModelViewSet):
                     )
 
             content_type = uploaded_file.content_type or mimetypes.guess_type(uploaded_file.name or "")[0] or "application/octet-stream"
-            object_key = f"datasets/{dataset.id}/{uuid4()}.tif"
+            object_key = f"datasets/{dataset.id}/{uuid4()}{suffix.lower()}"
 
             with open(temp_path, "rb") as stored_file:
                 upload_dataset_asset(
@@ -156,15 +145,15 @@ class DatasetViewSet(viewsets.ModelViewSet):
             size_bytes=size_bytes,
             checksum_sha256=checksum.hexdigest(),
             is_downloadable=True,
-            is_renderable_rgb=asset_type == DatasetAssetType.ORTHOPHOTO_COG,
+            is_renderable_rgb=dataset.type == DatasetType.ORTHOPHOTO,
         )
         return Response(DatasetAssetSerializer(asset).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"])
     def publish(self, request, pk=None):
         dataset = self.get_object()
-        if request.user != dataset.uploader and request.user != dataset.processor:
-            return Response({"detail": "Only the uploader or processor can publish."}, status=status.HTTP_403_FORBIDDEN)
+        if request.user != dataset.uploader:
+            return Response({"detail": "Only the uploader can publish."}, status=status.HTTP_403_FORBIDDEN)
 
         if dataset.validation_status != ValidationStatus.VALID:
             return Response(
@@ -180,42 +169,15 @@ class DatasetViewSet(viewsets.ModelViewSet):
         dataset.save(update_fields=["status", "published_at", "updated_at"])
         return Response(self.get_serializer(dataset).data, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=["post"])
-    def hide(self, request, pk=None):
-        dataset = self.get_object()
-        dataset.status = DatasetStatus.HIDDEN
-        dataset.hidden_at = timezone.now()
-        dataset.save(update_fields=["status", "hidden_at", "updated_at"])
-        ModerationAction.objects.create(
-            dataset=dataset,
-            actor=request.user,
-            action_type=ModerationActionType.HIDE,
-            reason=request.data.get("reason"),
-        )
-        return Response(self.get_serializer(dataset).data, status=status.HTTP_200_OK)
-
-    @action(detail=True, methods=["post"])
-    def reinstate(self, request, pk=None):
-        dataset = self.get_object()
-        dataset.status = DatasetStatus.PUBLISHED
-        dataset.hidden_at = None
-        dataset.save(update_fields=["status", "hidden_at", "updated_at"])
-        ModerationAction.objects.create(
-            dataset=dataset,
-            actor=request.user,
-            action_type=ModerationActionType.REINSTATE,
-            reason=request.data.get("reason"),
-        )
-        return Response(self.get_serializer(dataset).data, status=status.HTTP_200_OK)
-
     @action(detail=True, methods=["get"])
     def download(self, request, pk=None):
-        dataset = get_object_or_404(
-            self.queryset,
+        dataset = self.queryset.filter(
             pk=pk,
             status=DatasetStatus.PUBLISHED,
             validation_status=ValidationStatus.VALID,
-        )
+        ).first()
+        if dataset is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         asset = dataset.assets.filter(is_downloadable=True).order_by("created_at").first()
         if asset is None:
             return Response({"detail": "No downloadable asset is available for this dataset."}, status=status.HTTP_404_NOT_FOUND)
@@ -230,74 +192,3 @@ class DatasetViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
-
-
-class MyDatasetListView(generics.ListAPIView):
-    serializer_class = DatasetSerializer
-    permission_classes = [IsAuthenticated]
-    queryset = Dataset.objects.select_related("uploader", "processor").prefetch_related("assets")
-
-    def get_queryset(self):
-        return self.queryset.filter(uploader=self.request.user)
-
-
-class RawAccessRequestViewSet(viewsets.ModelViewSet):
-    serializer_class = RawAccessRequestSerializer
-    queryset = RawAccessRequest.objects.select_related("dataset", "requester", "reviewed_by")
-    http_method_names = ["get", "post"]
-
-    def get_permissions(self):
-        if self.action == "create":
-            permission_classes = [IsVerifiedUser]
-        elif self.action in {"approve", "deny"}:
-            permission_classes = [IsAuthenticated]
-        else:
-            permission_classes = [IsAuthenticated]
-        return [permission() for permission in permission_classes]
-
-    def get_queryset(self):
-        user = self.request.user
-        if not user or not user.is_authenticated:
-            return RawAccessRequest.objects.none()
-        if self.action in {"approve", "deny"}:
-            return self.queryset
-        return self.queryset.filter(Q(dataset__uploader=user) | Q(requester=user)).distinct()
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        dataset = serializer.validated_data["dataset"]
-        if dataset.status != DatasetStatus.PUBLISHED or dataset.validation_status != ValidationStatus.VALID:
-            return Response({"detail": "Raw access can only be requested for published, valid datasets."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            raw_access_request = serializer.save()
-        except IntegrityError:
-            return Response({"detail": "A pending raw access request already exists for this dataset."}, status=status.HTTP_400_BAD_REQUEST)
-
-        return Response(self.get_serializer(raw_access_request).data, status=status.HTTP_201_CREATED)
-
-    @action(detail=True, methods=["post"])
-    def approve(self, request, pk=None):
-        raw_request = self.get_object()
-        if request.user != raw_request.dataset.uploader:
-            return Response({"detail": "Only the uploader can approve raw access requests."}, status=status.HTTP_403_FORBIDDEN)
-
-        raw_request.status = RawAccessRequestStatus.APPROVED
-        raw_request.reviewed_by = request.user
-        raw_request.reviewed_at = timezone.now()
-        raw_request.save(update_fields=["status", "reviewed_by", "reviewed_at", "updated_at"])
-        return Response(self.get_serializer(raw_request).data, status=status.HTTP_200_OK)
-
-    @action(detail=True, methods=["post"])
-    def deny(self, request, pk=None):
-        raw_request = self.get_object()
-        if request.user != raw_request.dataset.uploader:
-            return Response({"detail": "Only the uploader can deny raw access requests."}, status=status.HTTP_403_FORBIDDEN)
-
-        raw_request.status = RawAccessRequestStatus.DENIED
-        raw_request.reviewed_by = request.user
-        raw_request.reviewed_at = timezone.now()
-        raw_request.save(update_fields=["status", "reviewed_by", "reviewed_at", "updated_at"])
-        return Response(self.get_serializer(raw_request).data, status=status.HTTP_200_OK)

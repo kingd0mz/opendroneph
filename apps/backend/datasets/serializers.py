@@ -3,7 +3,12 @@ import json
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon
 from rest_framework import serializers
 
-from datasets.models import Dataset, DatasetAsset, DatasetAssetType, DownloadEvent, RawAccessRequest
+from datasets.models import (
+    Dataset,
+    DatasetAsset,
+    DatasetAssetType,
+    DownloadEvent,
+)
 from users.services import user_display_name
 
 
@@ -85,7 +90,6 @@ class DatasetSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "uploader",
-            "processor",
             "footprint",
             "type",
             "status",
@@ -98,7 +102,6 @@ class DatasetSerializer(serializers.ModelSerializer):
             "crs_epsg",
             "processing_software",
             "published_at",
-            "hidden_at",
             "created_at",
             "updated_at",
             "assets",
@@ -106,11 +109,9 @@ class DatasetSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "uploader",
-            "processor",
             "status",
             "validation_status",
             "published_at",
-            "hidden_at",
             "created_at",
             "updated_at",
             "assets",
@@ -142,35 +143,6 @@ class DatasetDetailSerializer(serializers.ModelSerializer):
             "assets",
         ]
         read_only_fields = fields
-
-
-class RawAccessRequestSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = RawAccessRequest
-        fields = [
-            "id",
-            "dataset",
-            "requester",
-            "reason",
-            "status",
-            "reviewed_by",
-            "reviewed_at",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = [
-            "id",
-            "requester",
-            "status",
-            "reviewed_by",
-            "reviewed_at",
-            "created_at",
-            "updated_at",
-        ]
-
-    def create(self, validated_data):
-        validated_data["requester"] = self.context["request"].user
-        return super().create(validated_data)
 
 
 class DownloadEventSerializer(serializers.ModelSerializer):
