@@ -36,6 +36,9 @@ services:
     build: ./apps/backend
     container_name: opendroneph_backend
     command: python manage.py runserver 0.0.0.0:8000
+    environment:
+      AWS_S3_ENDPOINT_URL: http://minio:9000
+      AWS_S3_PUBLIC_ENDPOINT_URL: http://localhost:9000
     volumes:
       - ./apps/backend:/app
     ports:

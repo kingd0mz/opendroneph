@@ -1,9 +1,14 @@
 import axios from "axios";
 
 export class ApiError extends Error {
-  constructor(message: string) {
+  statusCode: number | null;
+  data: unknown;
+
+  constructor(message: string, options?: { statusCode?: number | null; data?: unknown }) {
     super(message);
     this.name = "ApiError";
+    this.statusCode = options?.statusCode ?? null;
+    this.data = options?.data;
   }
 }
 
@@ -19,6 +24,11 @@ api.interceptors.response.use(
       error.response?.data?.detail ??
       error.message ??
       "An unexpected API error occurred.";
-    return Promise.reject(new ApiError(message));
+    return Promise.reject(
+      new ApiError(message, {
+        statusCode: error.response?.status ?? null,
+        data: error.response?.data,
+      }),
+    );
   },
 );

@@ -195,7 +195,7 @@ def test_anonymous_user_cannot_download(api_client, uploader, inside_ph_footprin
 
 
 @pytest.mark.django_db
-def test_verified_user_can_download(api_client, verified_user, uploader, inside_ph_footprint):
+def test_verified_user_can_download(api_client, verified_user, uploader, inside_ph_footprint, monkeypatch):
     dataset = _make_dataset(
         owner=uploader,
         footprint=inside_ph_footprint,
@@ -204,15 +204,185 @@ def test_verified_user_can_download(api_client, verified_user, uploader, inside_
     )
     asset = _add_asset(dataset, Path(__file__).resolve().parents[2] / "test_data" / "valid_cog.tif")
     api_client.force_login(verified_user)
+    presigned_url = "http://minio.local/download/dataset.tif"
+
+    monkeypatch.setattr("datasets.views.generate_dataset_asset_download_url", lambda **kwargs: presigned_url)
 
     response = api_client.get(reverse("dataset-download", args=[dataset.id]))
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["asset"]["id"] == str(asset.id)
+    assert response.json()["download_url"] == presigned_url
     event = DownloadEvent.objects.get()
     assert event.dataset == dataset
     assert event.asset == asset
     assert event.actor == verified_user
+
+
+@pytest.mark.django_db
+def test_retrieve_returns_public_dataset_detail(api_client, uploader, inside_ph_footprint):
+    dataset = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+    )
+    asset = _add_asset(dataset, Path(__file__).resolve().parents[2] / "test_data" / "valid_cog.tif")
+
+    response = api_client.get(reverse("dataset-detail", args=[dataset.id]))
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert payload["id"] == str(dataset.id)
+    assert payload["data_type"] == dataset.type
+    assert payload["uploader"]["id"] == str(uploader.id)
+    assert payload["uploader"]["username"] == "uploader"
+    assert payload["uploader"]["email"] == uploader.email
+    assert payload["validation_status"] == ValidationStatus.VALID
+    assert payload["assets"][0]["id"] == str(asset.id)
+    assert payload["assets"][0]["asset_type"] == asset.asset_type
+
+
+@pytest.mark.django_db
+def test_list_returns_only_public_valid_datasets(api_client, uploader, inside_ph_footprint):
+    public_dataset = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+    )
+    _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.DRAFT,
+        validation_status=ValidationStatus.VALID,
+    )
+    _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.INVALID,
+    )
+
+    response = api_client.get(reverse("dataset-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert len(payload) == 1
+    assert payload[0]["id"] == str(public_dataset.id)
+
+
+@pytest.mark.django_db
+def test_my_datasets_returns_all_owned_datasets(api_client, uploader, another_verified_user, inside_ph_footprint):
+    owned_draft = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.DRAFT,
+        validation_status=ValidationStatus.PENDING,
+    )
+    owned_published = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+    )
+    owned_hidden = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.HIDDEN,
+        validation_status=ValidationStatus.VALID,
+    )
+    owned_delisted = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.DELISTED,
+        validation_status=ValidationStatus.INVALID,
+    )
+    _make_dataset(
+        owner=another_verified_user,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+    )
+    api_client.force_login(uploader)
+
+    response = api_client.get(reverse("my-dataset-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    returned_ids = {item["id"] for item in payload}
+    assert returned_ids == {
+        str(owned_draft.id),
+        str(owned_published.id),
+        str(owned_hidden.id),
+        str(owned_delisted.id),
+    }
+
+
+@pytest.mark.django_db
+def test_my_datasets_requires_authentication(api_client):
+    response = api_client.get(reverse("my-dataset-list"))
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("dataset_status", "validation_status"),
+    [
+        (DatasetStatus.DRAFT, ValidationStatus.VALID),
+        (DatasetStatus.PUBLISHED, ValidationStatus.INVALID),
+        (DatasetStatus.HIDDEN, ValidationStatus.VALID),
+        (DatasetStatus.DELISTED, ValidationStatus.VALID),
+    ],
+)
+def test_non_public_dataset_detail_returns_not_found(
+    api_client,
+    uploader,
+    inside_ph_footprint,
+    dataset_status,
+    validation_status,
+):
+    dataset = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=dataset_status,
+        validation_status=validation_status,
+    )
+
+    response = api_client.get(reverse("dataset-detail", args=[dataset.id]))
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+def test_uploader_cannot_access_own_draft_dataset_via_public_detail_endpoint(api_client, uploader, inside_ph_footprint):
+    dataset = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.DRAFT,
+        validation_status=ValidationStatus.VALID,
+    )
+    api_client.force_login(uploader)
+
+    response = api_client.get(reverse("dataset-detail", args=[dataset.id]))
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+def test_authenticated_non_owner_cannot_access_draft_dataset(api_client, uploader, another_verified_user, inside_ph_footprint):
+    dataset = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.DRAFT,
+        validation_status=ValidationStatus.VALID,
+    )
+    api_client.force_login(another_verified_user)
+
+    response = api_client.get(reverse("dataset-detail", args=[dataset.id]))
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 @pytest.mark.django_db

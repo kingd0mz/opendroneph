@@ -8,7 +8,7 @@ from django.db import IntegrityError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import status, viewsets
+from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -28,12 +28,13 @@ from datasets.models import (
 )
 from datasets.permissions import IsModerator, IsVerifiedUser
 from datasets.serializers import (
+    DatasetDetailSerializer,
     DatasetAssetSerializer,
     DatasetAssetUploadSerializer,
     DatasetSerializer,
     RawAccessRequestSerializer,
 )
-from datasets.services.storage import upload_dataset_asset
+from datasets.services.storage import generate_dataset_asset_download_url, upload_dataset_asset
 from datasets.services.validation import validate_ph_boundary_intersection, validate_strict_cog
 
 
@@ -42,8 +43,13 @@ class DatasetViewSet(viewsets.ModelViewSet):
     queryset = Dataset.objects.select_related("uploader", "processor").prefetch_related("assets")
     http_method_names = ["get", "post"]
 
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return DatasetDetailSerializer
+        return super().get_serializer_class()
+
     def get_queryset(self):
-        if self.action in {"list", "retrieve"}:
+        if self.action == "list":
             return self.queryset.filter(
                 status=DatasetStatus.PUBLISHED,
                 validation_status=ValidationStatus.VALID,
@@ -69,6 +75,19 @@ class DatasetViewSet(viewsets.ModelViewSet):
         dataset = serializer.save()
         response_serializer = self.get_serializer(dataset)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    def retrieve(self, request, *args, **kwargs):
+        dataset = get_object_or_404(self.queryset, pk=kwargs["pk"])
+        is_public = (
+            dataset.status == DatasetStatus.PUBLISHED
+            and dataset.validation_status == ValidationStatus.VALID
+        )
+
+        if not is_public:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = self.get_serializer(dataset)
+        return Response(serializer.data)
 
     @action(detail=True, methods=["post"], url_path="upload-asset")
     def upload_asset(self, request, pk=None):
@@ -206,10 +225,20 @@ class DatasetViewSet(viewsets.ModelViewSet):
             {
                 "dataset": str(dataset.id),
                 "asset": DatasetAssetSerializer(asset).data,
+                "download_url": generate_dataset_asset_download_url(object_key=asset.object_key),
                 "download_event_id": str(event.id),
             },
             status=status.HTTP_200_OK,
         )
+
+
+class MyDatasetListView(generics.ListAPIView):
+    serializer_class = DatasetSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = Dataset.objects.select_related("uploader", "processor").prefetch_related("assets")
+
+    def get_queryset(self):
+        return self.queryset.filter(uploader=self.request.user)
 
 
 class RawAccessRequestViewSet(viewsets.ModelViewSet):

@@ -3,9 +3,8 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import type { FeatureCollection, MultiPolygon } from "geojson";
-import { DatasetPopupCard } from "../../components/DatasetPopupCard";
-import { createRoot, type Root } from "react-dom/client";
 import type { DatasetFeatureProperties } from "../datasets/datasetGeoJson";
+import { navigate } from "../../hooks/usePathname";
 
 const SOURCE_ID = "datasets";
 const FILL_LAYER_ID = "datasets-fill";
@@ -20,7 +19,6 @@ interface DatasetMapProps {
 export function DatasetMap({ datasetCollection }: DatasetMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const popupRootRef = useRef<Root | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -82,31 +80,9 @@ export function DatasetMap({ datasetCollection }: DatasetMapProps) {
       map.on("click", FILL_LAYER_ID, (event) => {
         const feature = event.features?.[0];
         const properties = feature?.properties as DatasetFeatureProperties | undefined;
-        const coordinates = event.lngLat;
-
-        if (!properties) {
-          return;
+        if (properties) {
+          navigate(`/datasets/${properties.id}`);
         }
-
-        const popupContainer = document.createElement("div");
-        popupRootRef.current?.unmount();
-        popupRootRef.current = createRoot(popupContainer);
-        popupRootRef.current.render(
-          <DatasetPopupCard
-            title={properties.title}
-            dataType={properties.dataType}
-            createdAt={properties.createdAt}
-          />,
-        );
-
-        new maplibregl.Popup({
-          closeButton: true,
-          closeOnClick: true,
-          maxWidth: "320px",
-        })
-          .setLngLat([coordinates.lng, coordinates.lat])
-          .setDOMContent(popupContainer)
-          .addTo(map);
       });
 
       map.on("mouseenter", FILL_LAYER_ID, () => {
@@ -121,7 +97,6 @@ export function DatasetMap({ datasetCollection }: DatasetMapProps) {
     mapRef.current = map;
 
     return () => {
-      popupRootRef.current?.unmount();
       map.remove();
       mapRef.current = null;
     };

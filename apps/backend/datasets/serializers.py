@@ -4,6 +4,7 @@ from django.contrib.gis.geos import GEOSGeometry, MultiPolygon
 from rest_framework import serializers
 
 from datasets.models import Dataset, DatasetAsset, DatasetAssetType, DownloadEvent, RawAccessRequest
+from users.services import user_display_name
 
 
 class MultiPolygonGeoJSONField(serializers.Field):
@@ -44,6 +45,28 @@ class DatasetAssetSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "dataset", "created_at"]
+
+
+class PublicUploaderSerializer(serializers.Serializer):
+    id = serializers.UUIDField(read_only=True)
+    username = serializers.SerializerMethodField()
+    email = serializers.EmailField(read_only=True)
+
+    def get_username(self, obj):
+        return user_display_name(obj)
+
+
+class PublicDatasetAssetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DatasetAsset
+        fields = [
+            "id",
+            "asset_type",
+            "size_bytes",
+            "is_downloadable",
+            "created_at",
+        ]
+        read_only_fields = fields
 
 
 class DatasetAssetUploadSerializer(serializers.Serializer):
@@ -96,6 +119,29 @@ class DatasetSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data["uploader"] = self.context["request"].user
         return super().create(validated_data)
+
+
+class DatasetDetailSerializer(serializers.ModelSerializer):
+    uploader = PublicUploaderSerializer(read_only=True)
+    footprint = MultiPolygonGeoJSONField()
+    data_type = serializers.CharField(source="type", read_only=True)
+    assets = PublicDatasetAssetSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Dataset
+        fields = [
+            "id",
+            "title",
+            "description",
+            "uploader",
+            "data_type",
+            "status",
+            "validation_status",
+            "created_at",
+            "footprint",
+            "assets",
+        ]
+        read_only_fields = fields
 
 
 class RawAccessRequestSerializer(serializers.ModelSerializer):
