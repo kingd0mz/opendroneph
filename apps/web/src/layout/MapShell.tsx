@@ -1,4 +1,4 @@
-import { AppBar, Box, Button, Stack, Toolbar, Typography } from "@mui/material";
+import { AppBar, Avatar, Box, Button, Stack, Toolbar, Typography } from "@mui/material";
 import type { PropsWithChildren } from "react";
 
 import { useAuth } from "../context/AuthContext";
@@ -13,7 +13,6 @@ export function MapShell({ children }: PropsWithChildren) {
     { label: "Jobs", to: "/jobs" },
     { label: "Upload", to: "/upload" },
     { label: "Leaderboard", to: "/leaderboard" },
-    { label: "Profile", to: "/profile" },
   ];
 
   function handleNavigate(to: string) {
@@ -55,11 +54,6 @@ export function MapShell({ children }: PropsWithChildren) {
             OpenDronePH
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">
-            {isAuthenticated && user ? (
-              <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.82)", mr: 1 }}>
-                {user.email}
-              </Typography>
-            ) : null}
             {links.map((link) => (
               <Button
                 key={link.to}
@@ -75,6 +69,33 @@ export function MapShell({ children }: PropsWithChildren) {
                 {link.label}
               </Button>
             ))}
+            {isAuthenticated && user ? (
+              <Button
+                onClick={() => handleNavigate("/profile")}
+                color="inherit"
+                variant={pathname === "/profile" ? "outlined" : "text"}
+                sx={{
+                  minWidth: 0,
+                  borderColor: "rgba(255,255,255,0.34)",
+                  color: "common.white",
+                  p: 0.5,
+                  borderRadius: 999,
+                }}
+              >
+                <Avatar
+                  sx={{
+                    width: 34,
+                    height: 34,
+                    bgcolor: "#f0b44d",
+                    color: "#12343b",
+                    fontWeight: 800,
+                    fontSize: "0.95rem",
+                  }}
+                >
+                  {user.email.slice(0, 1).toUpperCase()}
+                </Avatar>
+              </Button>
+            ) : null}
             {loading ? null : isAuthenticated ? (
               <Button
                 onClick={() => void handleLogout()}
