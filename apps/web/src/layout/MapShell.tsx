@@ -58,11 +58,11 @@ export function MapShell({ children }: PropsWithChildren) {
               <Button
                 key={link.to}
                 onClick={() => handleNavigate(link.to)}
-                color="inherit"
-                variant={pathname === link.to ? "outlined" : "text"}
+                color={link.to === "/upload" ? "warning" : "inherit"}
+                variant={link.to === "/upload" ? "contained" : pathname === link.to ? "outlined" : "text"}
                 sx={{
                   borderColor: "rgba(255,255,255,0.34)",
-                  color: "common.white",
+                  color: link.to === "/upload" ? "#17343a" : "common.white",
                   fontWeight: 700,
                 }}
               >

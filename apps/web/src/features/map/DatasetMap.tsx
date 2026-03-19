@@ -20,16 +20,68 @@ export interface AOIFeatureProperties {
   id: string;
   title: string;
   purpose: string;
+  isEvent: boolean;
 }
 
 interface DatasetMapProps {
   datasetCollection: FeatureCollection<MultiPolygon, DatasetFeatureProperties>;
   aoiCollection?: FeatureCollection<MultiPolygon, AOIFeatureProperties>;
+  hoveredAoiId?: string | null;
+  focusedAoiId?: string | null;
+  onAoiSelect?: (aoiId: string) => void;
 }
 
-export function DatasetMap({ datasetCollection, aoiCollection }: DatasetMapProps) {
+export function DatasetMap({
+  datasetCollection,
+  aoiCollection,
+  hoveredAoiId = null,
+  focusedAoiId = null,
+  onAoiSelect,
+}: DatasetMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+
+  function hasMapLayers(map: maplibregl.Map) {
+    return (
+      map.isStyleLoaded() &&
+      !!map.getLayer(AOI_FILL_LAYER_ID) &&
+      !!map.getLayer(AOI_STROKE_LAYER_ID) &&
+      !!map.getLayer(AOI_GLOW_LAYER_ID) &&
+      !!map.getLayer(DATASET_FILL_LAYER_ID)
+    );
+  }
+
+  function fitToAoi(aoiId: string | null) {
+    const map = mapRef.current;
+    if (!map || !aoiId || !aoiCollection || !map.isStyleLoaded()) {
+      return;
+    }
+
+    const feature = aoiCollection.features.find((entry) => entry.properties.id === aoiId);
+    if (!feature) {
+      return;
+    }
+
+    const bounds = new maplibregl.LngLatBounds();
+    let hasBounds = false;
+
+    for (const polygon of feature.geometry.coordinates) {
+      for (const ring of polygon) {
+        for (const [lng, lat] of ring) {
+          bounds.extend([Number(lng), Number(lat)]);
+          hasBounds = true;
+        }
+      }
+    }
+
+    if (hasBounds) {
+      map.fitBounds(bounds, {
+        padding: 84,
+        duration: 700,
+        maxZoom: 12,
+      });
+    }
+  }
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -81,9 +133,24 @@ export function DatasetMap({ datasetCollection, aoiCollection }: DatasetMapProps
         type: "line",
         source: AOI_SOURCE_ID,
         paint: {
-          "line-color": "#ffe18f",
-          "line-width": 12,
-          "line-opacity": 0.18,
+          "line-color": [
+            "case",
+            ["boolean", ["get", "isEvent"], false],
+            "#ff9087",
+            "#ffe18f",
+          ],
+          "line-width": [
+            "case",
+            ["boolean", ["get", "isEvent"], false],
+            16,
+            10,
+          ],
+          "line-opacity": [
+            "case",
+            ["boolean", ["get", "isEvent"], false],
+            0.24,
+            0.14,
+          ],
           "line-blur": 2,
         },
       });
@@ -93,8 +160,18 @@ export function DatasetMap({ datasetCollection, aoiCollection }: DatasetMapProps
         type: "fill",
         source: AOI_SOURCE_ID,
         paint: {
-          "fill-color": "#f0b44d",
-          "fill-opacity": 0.16,
+          "fill-color": [
+            "case",
+            ["boolean", ["get", "isEvent"], false],
+            "#ef6a61",
+            "#f0b44d",
+          ],
+          "fill-opacity": [
+            "case",
+            ["boolean", ["get", "isEvent"], false],
+            0.2,
+            0.12,
+          ],
         },
       });
 
@@ -103,8 +180,18 @@ export function DatasetMap({ datasetCollection, aoiCollection }: DatasetMapProps
         type: "line",
         source: AOI_SOURCE_ID,
         paint: {
-          "line-color": "#ffd166",
-          "line-width": 3.5,
+          "line-color": [
+            "case",
+            ["boolean", ["get", "isEvent"], false],
+            "#ffb2ac",
+            "#ffd166",
+          ],
+          "line-width": [
+            "case",
+            ["boolean", ["get", "isEvent"], false],
+            4.4,
+            3,
+          ],
         },
       });
 
@@ -140,7 +227,8 @@ export function DatasetMap({ datasetCollection, aoiCollection }: DatasetMapProps
         const feature = event.features?.[0];
         const properties = feature?.properties as AOIFeatureProperties | undefined;
         if (properties) {
-          navigate(`/aois/${properties.id}`);
+          onAoiSelect?.(properties.id);
+          fitToAoi(properties.id);
         }
       });
 
@@ -148,7 +236,8 @@ export function DatasetMap({ datasetCollection, aoiCollection }: DatasetMapProps
         const feature = event.features?.[0];
         const properties = feature?.properties as AOIFeatureProperties | undefined;
         if (properties) {
-          navigate(`/aois/${properties.id}`);
+          onAoiSelect?.(properties.id);
+          fitToAoi(properties.id);
         }
       });
 
@@ -183,11 +272,11 @@ export function DatasetMap({ datasetCollection, aoiCollection }: DatasetMapProps
       map.remove();
       mapRef.current = null;
     };
-  }, [datasetCollection]);
+  }, [aoiCollection, datasetCollection, onAoiSelect]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) {
+    if (!map || !map.isStyleLoaded()) {
       return;
     }
 
@@ -235,6 +324,46 @@ export function DatasetMap({ datasetCollection, aoiCollection }: DatasetMapProps
       });
     }
   }, [aoiCollection, datasetCollection]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !hasMapLayers(map)) {
+      return;
+    }
+
+    const activeAoiId = hoveredAoiId ?? focusedAoiId;
+
+    map.setPaintProperty(AOI_FILL_LAYER_ID, "fill-opacity", [
+      "case",
+      ["==", ["get", "id"], activeAoiId ?? ""],
+      0.32,
+      ["boolean", ["get", "isEvent"], false],
+      0.2,
+      0.12,
+    ]);
+    map.setPaintProperty(AOI_STROKE_LAYER_ID, "line-width", [
+      "case",
+      ["==", ["get", "id"], activeAoiId ?? ""],
+      6,
+      ["boolean", ["get", "isEvent"], false],
+      4.4,
+      3,
+    ]);
+    map.setPaintProperty(AOI_GLOW_LAYER_ID, "line-opacity", [
+      "case",
+      ["==", ["get", "id"], activeAoiId ?? ""],
+      0.42,
+      ["boolean", ["get", "isEvent"], false],
+      0.24,
+      0.14,
+    ]);
+  }, [focusedAoiId, hoveredAoiId]);
+
+  useEffect(() => {
+    if (focusedAoiId) {
+      fitToAoi(focusedAoiId);
+    }
+  }, [focusedAoiId]);
 
   return <div ref={containerRef} style={{ height: "100%", width: "100%" }} />;
 }
