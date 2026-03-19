@@ -1,4 +1,4 @@
-import { Button, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
+import { Box, Button, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
 import type { MouseEvent } from "react";
 
 import { navigate } from "../../hooks/usePathname";
@@ -19,6 +19,13 @@ interface EventCardProps {
 }
 
 export function EventCard({ event, isFocused, onFocus, onHover }: EventCardProps) {
+  const accentColor =
+    event.aoi.purpose === "disaster"
+      ? "#D62828"
+      : event.aoi.purpose === "landcover"
+        ? "#1D4ED8"
+        : "#F2C94C";
+
   function stopAndRun(action: () => void) {
     return (browserEvent: MouseEvent<HTMLButtonElement>) => {
       browserEvent.stopPropagation();
@@ -33,53 +40,57 @@ export function EventCard({ event, isFocused, onFocus, onHover }: EventCardProps
       onClick={() => onFocus(event.aoi.id)}
       sx={{
         cursor: "pointer",
-        borderRadius: 3,
-        border: isFocused ? "1px solid rgba(235,87,87,0.45)" : "1px solid rgba(235,87,87,0.18)",
-        background: isFocused
-          ? "linear-gradient(180deg, rgba(88,25,24,0.96) 0%, rgba(47,16,19,0.94) 100%)"
-          : "linear-gradient(180deg, rgba(70,23,27,0.96) 0%, rgba(35,14,18,0.94) 100%)",
-        color: "common.white",
-        boxShadow: isFocused ? "0 24px 56px rgba(85, 10, 10, 0.34)" : "0 18px 44px rgba(0,0,0,0.22)",
+        borderRadius: 1.5,
+        border: isFocused ? `1px solid ${accentColor}` : "1px solid rgba(11,31,58,0.08)",
+        backgroundColor: "#FFFFFF",
+        color: "text.primary",
+        boxShadow: isFocused ? "0 16px 36px rgba(11,31,58,0.14)" : "0 10px 24px rgba(11,31,58,0.08)",
+        overflow: "hidden",
       }}
     >
-      <CardContent sx={{ p: 2.2 }}>
+      <CardContent sx={{ p: 0 }}>
+        <Stack direction="row" alignItems="stretch">
+          <Box sx={{ width: 8, bgcolor: accentColor, flexShrink: 0 }} />
+          <Box sx={{ p: 2.2, flex: 1 }}>
         <Stack spacing={1.5}>
           <Stack direction="row" justifyContent="space-between" gap={1.5} alignItems="flex-start">
-            <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.15 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.15, color: "primary.main" }}>
               {event.aoi.title}
             </Typography>
             <Chip
               label={event.status}
               size="small"
               sx={{
-                bgcolor: "#ff8a80",
-                color: "#3c0d11",
-                fontWeight: 900,
+                bgcolor: accentColor,
+                color: event.aoi.purpose === "benthic" ? "#0B1F3A" : "#FFFFFF",
+                fontWeight: 800,
               }}
             />
           </Stack>
 
-          <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.76)" }}>
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {event.aoi.description || "Short-notice mission area awaiting drone coverage."}
           </Typography>
 
           <Stack spacing={0.5}>
-            <Typography variant="body2" sx={{ color: "#ffd9c7", fontWeight: 800 }}>
+            <Typography variant="body2" sx={{ color: "primary.main", fontWeight: 800 }}>
               {event.orthophotoCount} orthophoto{event.orthophotoCount === 1 ? "" : "s"} submitted
             </Typography>
-            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.74)" }}>
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               {event.contributorCount} contributor{event.contributorCount === 1 ? "" : "s"}
             </Typography>
           </Stack>
 
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.1}>
-            <Button variant="contained" color="warning" onClick={stopAndRun(() => navigate(`/aois/${event.aoi.id}`))}>
+            <Button variant="contained" color="primary" onClick={stopAndRun(() => navigate(`/aois/${event.aoi.id}`))}>
               View Area
             </Button>
-            <Button variant="outlined" color="inherit" onClick={stopAndRun(() => navigate(`/upload?aoi=${event.aoi.id}`))}>
+            <Button variant="outlined" color="primary" onClick={stopAndRun(() => navigate(`/upload?aoi=${event.aoi.id}`))}>
               Contribute Data
             </Button>
           </Stack>
+        </Stack>
+          </Box>
         </Stack>
       </CardContent>
     </Card>

@@ -14,6 +14,7 @@ import {
 } from "@mui/material";
 
 import { FullscreenState } from "../components/FullscreenState";
+import { BRAND_COPY } from "../content/brandCopy";
 import { useAuth } from "../context/AuthContext";
 import { navigate } from "../hooks/usePathname";
 import { ApiError } from "../services/api";
@@ -174,11 +175,13 @@ export function UploadPage() {
       if (detail.validationStatus === "valid") {
         setSuccessMessage(
           detail.aoi
-            ? `You contributed to ${detail.aoi.title}. Dataset is valid and ready to publish.`
-            : "Dataset added to public archive. It is valid and ready to publish.",
+            ? `You contributed to ${detail.aoi.title}. Dataset is valid and ready to publish for open access use.`
+            : "Dataset added to the public archive. It is valid and ready to publish.",
         );
       } else {
-        setSuccessMessage(detail.aoi ? `You contributed to ${detail.aoi.title}.` : "Dataset added to public archive.");
+        setSuccessMessage(
+          detail.aoi ? `You contributed to ${detail.aoi.title}.` : "Dataset added to the public archive.",
+        );
       }
     } catch (error) {
       setUploadError(error instanceof ApiError ? error.message : "Upload failed.");
@@ -230,10 +233,13 @@ export function UploadPage() {
       <Stack spacing={3} sx={{ maxWidth: 880, mx: "auto" }}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            Contribute Dataset
+            {BRAND_COPY.primaryCta}
           </Typography>
           <Typography variant="body1" sx={{ color: "text.secondary", mt: 1 }}>
-            Create a dataset record, upload one asset, then publish it if validation passes.
+            {BRAND_COPY.contributionMessage}
+          </Typography>
+          <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
+            {BRAND_COPY.accessMessage}
           </Typography>
         </Box>
 
@@ -242,6 +248,9 @@ export function UploadPage() {
             <Stack spacing={2.5} component="form" onSubmit={handleCreateDataset}>
               <Typography variant="h6" sx={{ fontWeight: 700 }}>
                 1. Create Dataset
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Create a basic dataset record, then upload one RAW archive or one orthophoto for validation and publishing.
               </Typography>
               {createError ? <Alert severity="error">{createError}</Alert> : null}
               <TextField
@@ -286,7 +295,7 @@ export function UploadPage() {
                 value={aoiId}
                 onChange={(event) => setAoiId(event.target.value)}
                 fullWidth
-                helperText="Optional context only. You can upload datasets anytime without selecting an AOI."
+                helperText="Optional context only. You can still contribute datasets anytime without selecting an AOI."
               >
                 <MenuItem value="">No AOI</MenuItem>
                 {aois.map((aoi) => (
@@ -305,7 +314,7 @@ export function UploadPage() {
                 />
               ) : null}
               <Alert severity="info">
-                Footprint uses a temporary placeholder inside the Philippines for now. Upload UI does not collect geometry yet.
+                Footprint uses a temporary placeholder inside the Philippines for now. The upload page does not collect geometry yet.
               </Alert>
               <Box>
                 <Button type="submit" variant="contained" disabled={isCreating || !title.trim()}>
@@ -321,6 +330,9 @@ export function UploadPage() {
             <Stack spacing={2.5}>
               <Typography variant="h6" sx={{ fontWeight: 700 }}>
                 2. Upload Asset
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Upload RAW drone imagery as a ZIP archive or upload a processed orthophoto as a GeoTIFF.
               </Typography>
               {!datasetId ? (
                 <Alert severity="info">Create a dataset first.</Alert>
@@ -358,6 +370,9 @@ export function UploadPage() {
               <Typography variant="h6" sx={{ fontWeight: 700 }}>
                 3. Publish Dataset
               </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Publish validated datasets to make them openly accessible for mapping, validation, and analysis.
+              </Typography>
               {successMessage ? <Alert severity="success">{successMessage}</Alert> : null}
               {publishError ? <Alert severity="error">{publishError}</Alert> : null}
               {validationStatus ? (
@@ -385,6 +400,7 @@ export function UploadPage() {
                   ) : null}
                 </Stack>
               ) : null}
+              <Alert severity="info">{BRAND_COPY.attributionMessage}</Alert>
               <Box>
                 <Button variant="contained" onClick={() => void handlePublish()} disabled={!canPublish}>
                   {isPublishing ? "Publishing..." : "Publish Dataset"}

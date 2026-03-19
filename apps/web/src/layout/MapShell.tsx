@@ -1,8 +1,10 @@
-import { AppBar, Avatar, Box, Button, Stack, Toolbar, Typography } from "@mui/material";
+import { AppBar, Avatar, Box, Button, Stack, Toolbar } from "@mui/material";
 import type { PropsWithChildren } from "react";
 
+import { BRAND_COPY } from "../content/brandCopy";
 import { useAuth } from "../context/AuthContext";
 import { navigate, usePathname } from "../hooks/usePathname";
+import { HeaderBrand } from "./HeaderBrand";
 
 export function MapShell({ children }: PropsWithChildren) {
   const pathname = usePathname();
@@ -11,7 +13,7 @@ export function MapShell({ children }: PropsWithChildren) {
   const links = [
     { label: "Home", to: "/" },
     { label: "Jobs", to: "/jobs" },
-    { label: "Upload", to: "/upload" },
+    { label: "Contribute", to: "/upload" },
     { label: "Leaderboard", to: "/leaderboard" },
   ];
 
@@ -37,8 +39,7 @@ export function MapShell({ children }: PropsWithChildren) {
         position="static"
         elevation={0}
         sx={{
-          background:
-            "linear-gradient(90deg, rgba(15,93,94,0.98) 0%, rgba(31,127,105,0.95) 100%)",
+          background: "linear-gradient(90deg, #0B1F3A 0%, #142C54 100%)",
           borderBottom: "1px solid rgba(255,255,255,0.12)",
         }}
       >
@@ -50,9 +51,7 @@ export function MapShell({ children }: PropsWithChildren) {
             gap: 2,
           }}
         >
-          <Typography variant="h6" component="h1">
-            OpenDronePH
-          </Typography>
+          <HeaderBrand />
           <Stack direction="row" spacing={1} alignItems="center">
             {links.map((link) => (
               <Button
@@ -62,11 +61,11 @@ export function MapShell({ children }: PropsWithChildren) {
                 variant={link.to === "/upload" ? "contained" : pathname === link.to ? "outlined" : "text"}
                 sx={{
                   borderColor: "rgba(255,255,255,0.34)",
-                  color: link.to === "/upload" ? "#17343a" : "common.white",
+                  color: link.to === "/upload" ? "#0B1F3A" : "common.white",
                   fontWeight: 700,
                 }}
               >
-                {link.label}
+                {link.to === "/upload" ? BRAND_COPY.primaryCta : link.label}
               </Button>
             ))}
             {isAuthenticated && user ? (
@@ -86,8 +85,8 @@ export function MapShell({ children }: PropsWithChildren) {
                   sx={{
                     width: 34,
                     height: 34,
-                    bgcolor: "#f0b44d",
-                    color: "#12343b",
+                    bgcolor: "#F2C94C",
+                    color: "#0B1F3A",
                     fontWeight: 800,
                     fontSize: "0.95rem",
                   }}
@@ -116,7 +115,7 @@ export function MapShell({ children }: PropsWithChildren) {
                   fontWeight: 700,
                 }}
               >
-                Login
+                Sign In
               </Button>
             )}
           </Stack>

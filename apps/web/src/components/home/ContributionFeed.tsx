@@ -21,9 +21,9 @@ export function ContributionFeed({ items }: ContributionFeedProps) {
         <Card
           key={item.id}
           sx={{
-            borderRadius: 3,
-            bgcolor: "rgba(255,255,255,0.88)",
-            border: "1px solid rgba(15,93,94,0.08)",
+            borderRadius: 1.5,
+            bgcolor: "#FFFFFF",
+            border: "1px solid rgba(11,31,58,0.08)",
             cursor: "pointer",
           }}
           onClick={() => navigate(`/datasets/${item.id}`)}
@@ -35,7 +35,7 @@ export function ContributionFeed({ items }: ContributionFeedProps) {
                 sx={{
                   width: 52,
                   height: 52,
-                  bgcolor: item.dataType === "orthophoto" ? "#1f7f69" : "#8b6b3d",
+                  bgcolor: item.dataType === "orthophoto" ? "#142C54" : "#0B1F3A",
                   color: "common.white",
                   fontWeight: 800,
                 }}

@@ -7,6 +7,7 @@ import { ContributionFeed, type ContributionFeedItem } from "../components/home/
 import { EventCard, type EventCardData } from "../components/home/EventCard";
 import { HomeLayout } from "../components/home/HomeLayout";
 import { JobList } from "../components/home/JobList";
+import { BRAND_COPY, SECTION_COPY } from "../content/brandCopy";
 import { useAuth } from "../context/AuthContext";
 import { toDatasetFeatureCollection } from "../features/datasets/datasetGeoJson";
 import { DatasetMap } from "../features/map/DatasetMap";
@@ -213,34 +214,69 @@ export function MapPage() {
   return (
     <HomeLayout
       sidebar={(
-        <Box sx={{ px: { xs: 2, md: 3 }, py: { xs: 2.5, md: 3 }, bgcolor: "#f4efe5" }}>
+        <Box sx={{ px: { xs: 2, md: 3 }, py: { xs: 2.5, md: 3 }, bgcolor: "background.default" }}>
           <Stack spacing={2.2}>
             <Card
               sx={{
                 borderRadius: 4,
                 overflow: "hidden",
-                background: "linear-gradient(140deg, #103238 0%, #1f7f69 58%, #f0b44d 100%)",
+                position: "relative",
+                background: "linear-gradient(135deg, #0B1F3A 0%, #142C54 62%, #1D4ED8 100%)",
                 color: "common.white",
-                boxShadow: "0 22px 58px rgba(16, 50, 56, 0.24)",
+                boxShadow: "0 22px 58px rgba(11, 31, 58, 0.22)",
               }}
             >
+              <Box
+                sx={{
+                  position: "absolute",
+                  width: 180,
+                  height: 180,
+                  borderRadius: "50%",
+                  right: -48,
+                  top: -44,
+                  background: "radial-gradient(circle, rgba(242,201,76,0.28) 0%, rgba(242,201,76,0.04) 68%, transparent 72%)",
+                }}
+              />
+              <Box
+                sx={{
+                  position: "absolute",
+                  width: 140,
+                  height: 140,
+                  borderRadius: "50%",
+                  right: 48,
+                  bottom: -58,
+                  background: "radial-gradient(circle, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.02) 70%, transparent 76%)",
+                }}
+              />
               <CardContent sx={{ p: 2.6 }}>
-                <Stack spacing={1.25}>
-                  <Typography variant="overline" sx={{ letterSpacing: 1.2, opacity: 0.92 }}>
-                    Help Map the Philippines
+                <Stack spacing={1.35} sx={{ position: "relative", zIndex: 1 }}>
+                  <Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1.03, fontSize: { xs: "2rem", md: "2.5rem" } }}>
+                    {BRAND_COPY.platformTitle}
                   </Typography>
-                  <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1.03, fontSize: { xs: "2rem", md: "2.5rem" } }}>
-                    The country needs data now.
+                  <Typography variant="h6" sx={{ color: "rgba(255,255,255,0.88)", fontWeight: 500 }}>
+                    {BRAND_COPY.platformSubtitle}
                   </Typography>
-                  <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.84)" }}>
-                    Join the community in providing drone data for disaster response and national mapping.
+                  <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.8)" }}>
+                    {BRAND_COPY.heroDescription}
                   </Typography>
+                  <Stack spacing={0.6}>
+                    {BRAND_COPY.valueStatements.map((statement) => (
+                      <Typography key={statement} variant="body2" sx={{ color: "rgba(255,255,255,0.78)" }}>
+                        {statement}
+                      </Typography>
+                    ))}
+                  </Stack>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2}>
                     <Button variant="contained" color="warning" onClick={() => navigate("/upload")}>
-                      Upload Dataset
+                      {BRAND_COPY.primaryCta}
                     </Button>
-                    <Button variant="outlined" color="inherit" onClick={() => navigate("/jobs")}>
-                      Browse Jobs
+                    <Button
+                      variant="outlined"
+                      color="inherit"
+                      onClick={() => navigate("/jobs")}
+                      sx={{ borderColor: "rgba(255,255,255,0.28)" }}
+                    >
+                      {BRAND_COPY.secondaryCta}
                     </Button>
                   </Stack>
                 </Stack>
@@ -249,19 +285,19 @@ export function MapPage() {
 
             {message ? <Alert severity="info">{message}</Alert> : null}
 
-            <Card sx={{ borderRadius: 4, bgcolor: "#fcfaf5" }}>
+            <Card sx={{ borderRadius: 4, bgcolor: "background.paper" }}>
               <CardContent sx={{ p: 2.1 }}>
                 <Stack spacing={1.5}>
                   <Box>
                     <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                      Active Missions
+                      {SECTION_COPY.activeMissionsTitle}
                     </Typography>
                     <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.4 }}>
-                      What is happening right now and where help is urgently needed.
+                      {SECTION_COPY.activeMissionsDescription}
                     </Typography>
                   </Box>
                   {activeEvents.length === 0 ? (
-                    <Alert severity="info">No active missions right now. Explore mapping priorities below.</Alert>
+                    <Alert severity="info">{SECTION_COPY.activeMissionsEmpty}</Alert>
                   ) : (
                     <Stack spacing={1.4}>
                       {activeEvents.map((event) => (
@@ -279,15 +315,15 @@ export function MapPage() {
               </CardContent>
             </Card>
 
-            <Card sx={{ borderRadius: 4, bgcolor: "#fcfaf5" }}>
+            <Card sx={{ borderRadius: 4, bgcolor: "background.paper" }}>
               <CardContent sx={{ p: 2.1 }}>
                 <Stack spacing={1.4}>
                   <Box>
                     <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                      Mapping Priorities
+                      {SECTION_COPY.mappingPrioritiesTitle}
                     </Typography>
                     <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.4 }}>
-                      Ongoing areas that still benefit from more imagery and outputs.
+                      {SECTION_COPY.mappingPrioritiesDescription}
                     </Typography>
                   </Box>
                   {mappingPriorities.length === 0 ? (
@@ -306,15 +342,15 @@ export function MapPage() {
               </CardContent>
             </Card>
 
-            <Card sx={{ borderRadius: 4, bgcolor: "#fcfaf5" }}>
+            <Card sx={{ borderRadius: 4, bgcolor: "background.paper" }}>
               <CardContent sx={{ p: 2.1 }}>
                 <Stack spacing={1.3}>
                   <Box>
                     <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                      Available Drone Data
+                      {SECTION_COPY.jobsTitle}
                     </Typography>
                     <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.4 }}>
-                      Open RAW archives that anyone can process into orthophotos.
+                      {SECTION_COPY.jobsDescription}
                     </Typography>
                   </Box>
                   {jobs.length === 0 ? (
@@ -328,15 +364,15 @@ export function MapPage() {
               </CardContent>
             </Card>
 
-            <Card sx={{ borderRadius: 4, bgcolor: "#fcfaf5" }}>
+            <Card sx={{ borderRadius: 4, bgcolor: "background.paper" }}>
               <CardContent sx={{ p: 2.1 }}>
                 <Stack spacing={1.3}>
                   <Box>
                     <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                      Recent Contributions
+                      {SECTION_COPY.contributionsTitle}
                     </Typography>
                     <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.4 }}>
-                      New public outputs from contributors across the country.
+                      {SECTION_COPY.contributionsDescription}
                     </Typography>
                   </Box>
                   {contributionFeed.length === 0 ? (
@@ -350,12 +386,61 @@ export function MapPage() {
               </CardContent>
             </Card>
 
+            <Card sx={{ borderRadius: 4, bgcolor: "background.paper" }}>
+              <CardContent sx={{ p: 2.1 }}>
+                <Stack spacing={1.3}>
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                      {SECTION_COPY.openAccessTitle}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.4 }}>
+                      {SECTION_COPY.openAccessDescription}
+                    </Typography>
+                  </Box>
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                    {BRAND_COPY.accessMessage}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                    {BRAND_COPY.attributionMessage}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                    {BRAND_COPY.recognitionMessage}
+                  </Typography>
+                </Stack>
+              </CardContent>
+            </Card>
+
+            <Card sx={{ borderRadius: 4, bgcolor: "background.paper" }}>
+              <CardContent sx={{ p: 2.1 }}>
+                <Stack spacing={1.3}>
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                      {BRAND_COPY.partnersTitle}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.4 }}>
+                      OpenDronePH brings together public institutions, technical communities, and local contributors.
+                    </Typography>
+                  </Box>
+                  <Stack spacing={0.7}>
+                    {BRAND_COPY.partners.map((partner) => (
+                      <Typography key={partner} variant="body2" sx={{ color: "text.secondary" }}>
+                        {partner}
+                      </Typography>
+                    ))}
+                  </Stack>
+                </Stack>
+              </CardContent>
+            </Card>
+
             {profile ? (
-              <Card sx={{ borderRadius: 4, bgcolor: "#0f5d5e", color: "common.white" }}>
+              <Card sx={{ borderRadius: 4, bgcolor: "primary.main", color: "common.white" }}>
                 <CardContent sx={{ p: 2.1 }}>
                   <Stack spacing={1.4}>
                     <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                      Your Contributions
+                      {SECTION_COPY.impactTitle}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.84)" }}>
+                      {SECTION_COPY.impactDescription}
                     </Typography>
                     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                       <Chip label={`${profile.dataset_count} datasets uploaded`} sx={{ bgcolor: "#ffe6ab", color: "#17343a", fontWeight: 800 }} />

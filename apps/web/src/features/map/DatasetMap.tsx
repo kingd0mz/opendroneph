@@ -136,20 +136,20 @@ export function DatasetMap({
           "line-color": [
             "case",
             ["boolean", ["get", "isEvent"], false],
-            "#ff9087",
-            "#ffe18f",
+            "#D62828",
+            "#1D4ED8",
           ],
           "line-width": [
             "case",
             ["boolean", ["get", "isEvent"], false],
             16,
-            10,
+            9,
           ],
           "line-opacity": [
             "case",
             ["boolean", ["get", "isEvent"], false],
-            0.24,
-            0.14,
+            0.22,
+            0.12,
           ],
           "line-blur": 2,
         },
@@ -163,14 +163,14 @@ export function DatasetMap({
           "fill-color": [
             "case",
             ["boolean", ["get", "isEvent"], false],
-            "#ef6a61",
-            "#f0b44d",
+            "#D62828",
+            "#1D4ED8",
           ],
           "fill-opacity": [
             "case",
             ["boolean", ["get", "isEvent"], false],
-            0.2,
-            0.12,
+            0.14,
+            0.1,
           ],
         },
       });
@@ -183,14 +183,14 @@ export function DatasetMap({
           "line-color": [
             "case",
             ["boolean", ["get", "isEvent"], false],
-            "#ffb2ac",
-            "#ffd166",
+            "#D62828",
+            "#1D4ED8",
           ],
           "line-width": [
             "case",
             ["boolean", ["get", "isEvent"], false],
             4.4,
-            3,
+            2.6,
           ],
         },
       });
@@ -200,8 +200,8 @@ export function DatasetMap({
         type: "fill",
         source: DATASET_SOURCE_ID,
         paint: {
-          "fill-color": "#1f7f69",
-          "fill-opacity": 0.2,
+          "fill-color": "#0B1F3A",
+          "fill-opacity": 0.1,
         },
       });
 
@@ -210,8 +210,8 @@ export function DatasetMap({
         type: "line",
         source: DATASET_SOURCE_ID,
         paint: {
-          "line-color": "#0f5d5e",
-          "line-width": 1.8,
+          "line-color": "#142C54",
+          "line-width": 1.4,
         },
       });
 

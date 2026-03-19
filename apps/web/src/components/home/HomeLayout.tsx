@@ -14,7 +14,7 @@ export function HomeLayout({ sidebar, map }: HomeLayoutProps) {
         minHeight: 0,
         display: "flex",
         flexDirection: { xs: "column", lg: "row" },
-        bgcolor: "#06171c",
+        bgcolor: "#F5F7FA",
       }}
     >
       <Box
@@ -25,8 +25,8 @@ export function HomeLayout({ sidebar, map }: HomeLayoutProps) {
           height: { xs: "auto", lg: "100%" },
           maxHeight: { lg: "100%" },
           overflow: "auto",
-          bgcolor: "#f4efe5",
-          borderRight: { lg: "1px solid rgba(10, 33, 38, 0.08)" },
+          bgcolor: "#F5F7FA",
+          borderRight: { lg: "1px solid rgba(11,31,58,0.08)" },
         }}
       >
         {sidebar}

@@ -32,18 +32,26 @@ export function AOICard({ aoi, isFocused, onFocus, onHover }: AOICardProps) {
       onClick={() => onFocus(aoi.id)}
       sx={{
         cursor: "pointer",
-        borderRadius: 3,
-        bgcolor: isFocused ? "rgba(255,255,255,0.98)" : "rgba(255,255,255,0.9)",
-        border: isFocused ? "1px solid rgba(15,93,94,0.22)" : "1px solid rgba(15,93,94,0.08)",
+        borderRadius: 1.5,
+        bgcolor: "#FFFFFF",
+        border: isFocused ? "1px solid rgba(11,31,58,0.22)" : "1px solid rgba(11,31,58,0.08)",
+        boxShadow: isFocused ? "0 14px 30px rgba(11,31,58,0.12)" : "0 8px 20px rgba(11,31,58,0.06)",
       }}
     >
       <CardContent sx={{ p: 1.8 }}>
         <Stack spacing={1.1}>
           <Stack direction="row" justifyContent="space-between" gap={1}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.2, color: "primary.main" }}>
               {aoi.title}
             </Typography>
-            <Chip label={PURPOSE_LABELS[aoi.purpose]} size="small" color="primary" />
+            <Chip
+              label={PURPOSE_LABELS[aoi.purpose]}
+              size="small"
+              sx={{
+                bgcolor: aoi.purpose === "disaster" ? "rgba(214,40,40,0.1)" : "rgba(29,78,216,0.1)",
+                color: aoi.purpose === "disaster" ? "#D62828" : "#1D4ED8",
+              }}
+            />
           </Stack>
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
             {aoi.orthophotoCount} output{aoi.orthophotoCount === 1 ? "" : "s"}

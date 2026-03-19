@@ -25,18 +25,22 @@ export function JobCard({ job, downloadingJobId, onDownload }: JobCardProps) {
   return (
     <Card
       sx={{
-        borderRadius: 3,
-        bgcolor: "rgba(255,255,255,0.92)",
-        border: "1px solid rgba(15,93,94,0.08)",
+        borderRadius: 1.5,
+        bgcolor: "#FFFFFF",
+        border: "1px solid rgba(11,31,58,0.08)",
       }}
     >
       <CardContent sx={{ p: 2 }}>
         <Stack spacing={1.2}>
           <Stack direction="row" justifyContent="space-between" gap={1.5}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.2, color: "primary.main" }}>
               {job.title}
             </Typography>
-            <Chip label=".zip" size="small" color="primary" />
+            <Chip
+              label=".zip"
+              size="small"
+              sx={{ bgcolor: "rgba(11,31,58,0.08)", color: "primary.main" }}
+            />
           </Stack>
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
             Uploader: {job.uploader.username}
