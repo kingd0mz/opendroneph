@@ -68,6 +68,13 @@ class Dataset(models.Model):
         on_delete=models.PROTECT,
         related_name="uploaded_datasets",
     )
+    source_dataset = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="derived_datasets",
+    )
     footprint = models.MultiPolygonField(srid=4326, spatial_index=True)
     type = models.CharField(max_length=20, choices=DatasetType.choices)
     status = models.CharField(
@@ -164,3 +171,36 @@ class DownloadEvent(models.Model):
 
     def __str__(self):
         return f"{self.dataset_id}:{self.asset_id}:{self.actor_id}"
+
+
+class JobActivityStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    COMPLETED = "completed", "Completed"
+
+
+class JobActivity(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    dataset = models.ForeignKey(
+        Dataset,
+        on_delete=models.CASCADE,
+        related_name="job_activities",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="job_activities",
+    )
+    status = models.CharField(max_length=20, choices=JobActivityStatus.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["dataset", "user"], name="job_activity_dataset_user_unique"),
+        ]
+        indexes = [
+            models.Index(fields=["dataset", "status"], name="job_act_ds_status_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.dataset_id}:{self.user_id}:{self.status}"

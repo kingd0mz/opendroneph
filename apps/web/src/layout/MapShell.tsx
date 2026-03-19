@@ -10,6 +10,7 @@ export function MapShell({ children }: PropsWithChildren) {
 
   const links = [
     { label: "Map", to: "/" },
+    { label: "Jobs", to: "/jobs" },
     { label: "Upload", to: "/upload" },
     { label: "Leaderboard", to: "/leaderboard" },
     { label: "Profile", to: "/profile" },

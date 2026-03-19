@@ -58,6 +58,7 @@ export function UploadPage() {
   const [description, setDescription] = useState("");
   const [datasetType, setDatasetType] = useState<DatasetType>("raw");
   const [captureDate, setCaptureDate] = useState(todayDate());
+  const [sourceDatasetId, setSourceDatasetId] = useState("");
   const [datasetId, setDatasetId] = useState<string | null>(null);
   const [datasetDetail, setDatasetDetail] = useState<DatasetDetail | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -103,6 +104,7 @@ export function UploadPage() {
         title: title.trim(),
         description: description.trim(),
         type: datasetType,
+        sourceDatasetId: datasetType === "orthophoto" && sourceDatasetId.trim() ? sourceDatasetId.trim() : undefined,
         footprint: PLACEHOLDER_FOOTPRINT,
         captureDate: captureDate || todayDate(),
       });
@@ -241,6 +243,15 @@ export function UploadPage() {
                 InputLabelProps={{ shrink: true }}
                 fullWidth
               />
+              {datasetType === "orthophoto" ? (
+                <TextField
+                  label="Source RAW Dataset ID (optional)"
+                  value={sourceDatasetId}
+                  onChange={(event) => setSourceDatasetId(event.target.value)}
+                  fullWidth
+                  helperText="Optional reference only. Orthophotos can still be created and published without linking."
+                />
+              ) : null}
               <Alert severity="info">
                 Footprint uses a temporary placeholder inside the Philippines for now. Upload UI does not collect geometry yet.
               </Alert>
@@ -310,6 +321,11 @@ export function UploadPage() {
                   <Typography variant="body2"><strong>Dataset ID:</strong> {datasetDetail.id}</Typography>
                   <Typography variant="body2"><strong>Status:</strong> {datasetDetail.status}</Typography>
                   <Typography variant="body2"><strong>Type:</strong> {datasetDetail.dataType}</Typography>
+                  {datasetDetail.sourceDataset ? (
+                    <Typography variant="body2">
+                      <strong>Source RAW Dataset:</strong> {datasetDetail.sourceDataset.title} ({datasetDetail.sourceDataset.id})
+                    </Typography>
+                  ) : null}
                 </Stack>
               ) : null}
               <Box>

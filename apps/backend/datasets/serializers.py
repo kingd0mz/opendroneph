@@ -8,6 +8,7 @@ from datasets.models import (
     DatasetAsset,
     DatasetAssetType,
     DownloadEvent,
+    JobActivity,
 )
 from users.services import user_display_name
 
@@ -74,14 +75,48 @@ class PublicDatasetAssetSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class DatasetAssetUploadSerializer(serializers.Serializer):
-    asset_type = serializers.ChoiceField(choices=DatasetAssetType.choices)
-    file = serializers.FileField()
+class DatasetSummarySerializer(serializers.ModelSerializer):
+    data_type = serializers.CharField(source="type", read_only=True)
+
+    class Meta:
+        model = Dataset
+        fields = [
+            "id",
+            "title",
+            "data_type",
+            "created_at",
+        ]
+        read_only_fields = fields
 
 
-class DatasetSerializer(serializers.ModelSerializer):
-    footprint = MultiPolygonGeoJSONField()
-    assets = DatasetAssetSerializer(many=True, read_only=True)
+class JobActivityUserSerializer(serializers.Serializer):
+    id = serializers.UUIDField(read_only=True)
+    username = serializers.SerializerMethodField()
+
+    def get_username(self, obj):
+        return user_display_name(obj)
+
+
+class JobActivitySerializer(serializers.ModelSerializer):
+    user = JobActivityUserSerializer(read_only=True)
+
+    class Meta:
+        model = JobActivity
+        fields = [
+            "id",
+            "status",
+            "user",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class JobListDatasetSerializer(serializers.ModelSerializer):
+    uploader = PublicUploaderSerializer(read_only=True)
+    data_type = serializers.CharField(source="type", read_only=True)
+    active_user_count = serializers.SerializerMethodField()
+    active_usernames = serializers.SerializerMethodField()
 
     class Meta:
         model = Dataset
@@ -90,6 +125,54 @@ class DatasetSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "uploader",
+            "data_type",
+            "status",
+            "validation_status",
+            "created_at",
+            "active_user_count",
+            "active_usernames",
+        ]
+        read_only_fields = fields
+
+    def get_active_user_count(self, obj):
+        active_activities = getattr(obj, "prefetched_active_job_activities", None)
+        if active_activities is not None:
+            return len(active_activities)
+        return obj.job_activities.filter(status="active").count()
+
+    def get_active_usernames(self, obj):
+        active_activities = getattr(obj, "prefetched_active_job_activities", None)
+        if active_activities is None:
+            active_activities = obj.job_activities.filter(status="active").select_related("user").order_by("created_at")[:3]
+        return [user_display_name(activity.user) for activity in active_activities[:3]]
+
+
+class DatasetAssetUploadSerializer(serializers.Serializer):
+    asset_type = serializers.ChoiceField(choices=DatasetAssetType.choices)
+    file = serializers.FileField()
+
+
+class DatasetSerializer(serializers.ModelSerializer):
+    footprint = MultiPolygonGeoJSONField()
+    assets = DatasetAssetSerializer(many=True, read_only=True)
+    source_dataset_id = serializers.PrimaryKeyRelatedField(
+        queryset=Dataset.objects.all(),
+        source="source_dataset",
+        allow_null=True,
+        required=False,
+        write_only=True,
+    )
+    source_dataset = DatasetSummarySerializer(read_only=True)
+
+    class Meta:
+        model = Dataset
+        fields = [
+            "id",
+            "title",
+            "description",
+            "uploader",
+            "source_dataset",
+            "source_dataset_id",
             "footprint",
             "type",
             "status",
@@ -127,6 +210,7 @@ class DatasetDetailSerializer(serializers.ModelSerializer):
     footprint = MultiPolygonGeoJSONField()
     data_type = serializers.CharField(source="type", read_only=True)
     assets = PublicDatasetAssetSerializer(many=True, read_only=True)
+    source_dataset = DatasetSummarySerializer(read_only=True)
 
     class Meta:
         model = Dataset
@@ -135,6 +219,7 @@ class DatasetDetailSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "uploader",
+            "source_dataset",
             "data_type",
             "status",
             "validation_status",

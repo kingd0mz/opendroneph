@@ -15,6 +15,13 @@ export interface DatasetAssetSummary {
   createdAt: string;
 }
 
+export interface DatasetReference {
+  id: string;
+  title: string;
+  dataType: DatasetType;
+  createdAt: string;
+}
+
 export interface DatasetApiItem {
   id: string;
   title: string;
@@ -33,6 +40,12 @@ export interface DatasetDetailApiItem {
     username: string;
     email: string;
   };
+  source_dataset: {
+    id: string;
+    title: string;
+    data_type: DatasetType;
+    created_at: string;
+  } | null;
   data_type: DatasetType;
   status: string;
   validation_status: ValidationStatus;
@@ -73,6 +86,7 @@ export interface DatasetDetail {
   title: string;
   description: string;
   uploader: DatasetUploader;
+  sourceDataset: DatasetReference | null;
   dataType: DatasetType;
   status: string;
   validationStatus: ValidationStatus;
@@ -94,6 +108,7 @@ export interface CreateDatasetInput {
   type: DatasetType;
   footprint: GeoJSON.MultiPolygon;
   captureDate: string;
+  sourceDatasetId?: string;
 }
 
 export interface UploadDatasetAssetInput {
@@ -101,4 +116,70 @@ export interface UploadDatasetAssetInput {
   assetType: "raw_archive" | "orthophoto_cog";
   file: File;
   onProgress?: (progress: number) => void;
+}
+
+export interface JobApiItem {
+  id: string;
+  title: string;
+  description: string;
+  uploader: DatasetUploader;
+  data_type: DatasetType;
+  status: string;
+  validation_status: ValidationStatus;
+  created_at: string;
+  active_user_count: number;
+  active_usernames: string[];
+}
+
+export interface Job {
+  id: string;
+  title: string;
+  description: string;
+  uploader: DatasetUploader;
+  dataType: DatasetType;
+  status: string;
+  validationStatus: ValidationStatus;
+  createdAt: string;
+  activeUserCount: number;
+  activeUsernames: string[];
+}
+
+export interface JobActivityEntryApiItem {
+  id: string;
+  status: "active" | "completed";
+  user: {
+    id: string;
+    username: string;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JobActivityApiResponse {
+  dataset: {
+    id: string;
+    title: string;
+  };
+  active_users: JobActivityEntryApiItem[];
+  completed_users: JobActivityEntryApiItem[];
+}
+
+export interface JobActivityEntry {
+  id: string;
+  status: "active" | "completed";
+  user: {
+    id: string;
+    username: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface JobActivity {
+  dataset: {
+    id: string;
+    title: string;
+  };
+  activeUsers: JobActivityEntry[];
+  completedUsers: JobActivityEntry[];
 }

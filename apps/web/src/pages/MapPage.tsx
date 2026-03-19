@@ -8,9 +8,13 @@ import { toDatasetFeatureCollection } from "../features/datasets/datasetGeoJson"
 
 export function MapPage() {
   const { datasets, isLoading, error } = useDatasets();
-  const datasetCollection = useMemo(
-    () => toDatasetFeatureCollection(datasets),
+  const orthophotoDatasets = useMemo(
+    () => datasets.filter((dataset) => dataset.dataType === "orthophoto"),
     [datasets],
+  );
+  const datasetCollection = useMemo(
+    () => toDatasetFeatureCollection(orthophotoDatasets),
+    [orthophotoDatasets],
   );
 
   if (isLoading) {
@@ -27,11 +31,11 @@ export function MapPage() {
     );
   }
 
-  if (datasets.length === 0) {
+  if (orthophotoDatasets.length === 0) {
     return (
       <FullscreenState
-        title="No Published Datasets"
-        description="Published dataset footprints will appear here once the backend returns valid public records."
+        title="No Published Orthophotos"
+        description="Published, valid orthophoto footprints will appear here once the backend returns public records."
         severity="warning"
       />
     );

@@ -8,7 +8,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from datasets.models import Dataset, DatasetStatus, ValidationStatus
+from datasets.models import Dataset, DatasetStatus, DatasetType, JobActivity, JobActivityStatus, ValidationStatus
 from users.models import User
 from users.serializers import LeaderboardEntrySerializer, LoginSerializer, UserProfileSerializer
 
@@ -32,7 +32,16 @@ def _profile_queryset():
                 validation_status=ValidationStatus.VALID,
             ).order_by("-created_at"),
             to_attr="public_contributions",
-        )
+        ),
+        Prefetch(
+            "job_activities",
+            queryset=JobActivity.objects.filter(
+                status=JobActivityStatus.COMPLETED,
+                dataset__type=DatasetType.RAW,
+                dataset__status=DatasetStatus.PUBLISHED,
+            ).select_related("dataset").order_by("-updated_at"),
+            to_attr="public_completed_jobs",
+        ),
     )
 
 

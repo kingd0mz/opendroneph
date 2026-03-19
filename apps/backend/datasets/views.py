@@ -4,20 +4,22 @@ import os
 import tempfile
 from uuid import uuid4
 
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from datasets.models import (
     Dataset,
     DatasetAsset,
-    DatasetAssetType,
     DatasetStatus,
     DatasetType,
     DownloadEvent,
+    JobActivity,
+    JobActivityStatus,
     ValidationStatus,
 )
 from datasets.serializers import (
@@ -25,14 +27,37 @@ from datasets.serializers import (
     DatasetAssetSerializer,
     DatasetAssetUploadSerializer,
     DatasetSerializer,
+    JobActivitySerializer,
+    JobListDatasetSerializer,
 )
 from datasets.services.storage import generate_dataset_asset_download_url, upload_dataset_asset
 from datasets.services.validation import validate_ph_boundary_intersection, validate_strict_cog
 
 
+def _job_dataset_queryset():
+    return Dataset.objects.filter(
+        type=DatasetType.RAW,
+        status=DatasetStatus.PUBLISHED,
+    ).select_related("uploader").prefetch_related(
+        Prefetch(
+            "job_activities",
+            queryset=JobActivity.objects.filter(status=JobActivityStatus.ACTIVE).select_related("user").order_by("created_at"),
+            to_attr="prefetched_active_job_activities",
+        )
+    )
+
+
+def _get_job_dataset(dataset_id):
+    return Dataset.objects.filter(
+        pk=dataset_id,
+        type=DatasetType.RAW,
+        status=DatasetStatus.PUBLISHED,
+    ).select_related("uploader").first()
+
+
 class DatasetViewSet(viewsets.ModelViewSet):
     serializer_class = DatasetSerializer
-    queryset = Dataset.objects.select_related("uploader").prefetch_related("assets")
+    queryset = Dataset.objects.select_related("uploader", "source_dataset").prefetch_related("assets")
     http_method_names = ["get", "post"]
 
     def get_serializer_class(self):
@@ -189,6 +214,73 @@ class DatasetViewSet(viewsets.ModelViewSet):
                 "asset": DatasetAssetSerializer(asset).data,
                 "download_url": generate_dataset_asset_download_url(object_key=asset.object_key),
                 "download_event_id": str(event.id),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class JobListView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        serializer = JobListDatasetSerializer(_job_dataset_queryset().order_by("-created_at"), many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class JobStartView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, dataset_id):
+        dataset = _get_job_dataset(dataset_id)
+        if dataset is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        activity, created = JobActivity.objects.update_or_create(
+            dataset=dataset,
+            user=request.user,
+            defaults={"status": JobActivityStatus.ACTIVE},
+        )
+        serializer = JobActivitySerializer(activity)
+        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class JobCompleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, dataset_id):
+        dataset = _get_job_dataset(dataset_id)
+        if dataset is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        activity, created = JobActivity.objects.update_or_create(
+            dataset=dataset,
+            user=request.user,
+            defaults={"status": JobActivityStatus.COMPLETED},
+        )
+        serializer = JobActivitySerializer(activity)
+        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class JobActivityView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, dataset_id):
+        dataset = _get_job_dataset(dataset_id)
+        if dataset is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        activities = dataset.job_activities.select_related("user").order_by("updated_at", "created_at")
+        active_activities = [activity for activity in activities if activity.status == JobActivityStatus.ACTIVE]
+        completed_activities = [activity for activity in activities if activity.status == JobActivityStatus.COMPLETED]
+
+        return Response(
+            {
+                "dataset": {
+                    "id": str(dataset.id),
+                    "title": dataset.title,
+                },
+                "active_users": JobActivitySerializer(active_activities, many=True).data,
+                "completed_users": JobActivitySerializer(completed_activities, many=True).data,
             },
             status=status.HTTP_200_OK,
         )

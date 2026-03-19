@@ -174,7 +174,18 @@ export function DatasetDetailPage({ datasetId }: DatasetDetailPageProps) {
                 <Typography variant="body2"><strong>Data type:</strong> {dataset.dataType}</Typography>
                 <Typography variant="body2"><strong>Status:</strong> {dataset.status}</Typography>
                 <Typography variant="body2"><strong>Created:</strong> {formatDate(dataset.createdAt)}</Typography>
-                <Typography variant="body2"><strong>Uploader:</strong> {dataset.uploader.username} ({dataset.uploader.email})</Typography>
+                <Typography
+                  variant="body2"
+                  sx={{ cursor: "pointer" }}
+                  onClick={() => navigate(`/users/${dataset.uploader.id}`)}
+                >
+                  <strong>Uploader:</strong> {dataset.uploader.username} ({dataset.uploader.email})
+                </Typography>
+                {dataset.sourceDataset ? (
+                  <Typography variant="body2">
+                    <strong>Source RAW Dataset:</strong> {dataset.sourceDataset.title}
+                  </Typography>
+                ) : null}
               </Stack>
             </CardContent>
           </Card>

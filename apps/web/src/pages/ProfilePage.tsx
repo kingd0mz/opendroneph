@@ -4,8 +4,12 @@ import { FullscreenLoadingState, FullscreenState } from "../components/Fullscree
 import { navigate } from "../hooks/usePathname";
 import { useProfile } from "../hooks/useProfile";
 
-export function ProfilePage() {
-  const { profile, isLoading, error } = useProfile();
+interface ProfilePageProps {
+  userId?: string | null;
+}
+
+export function ProfilePage({ userId = null }: ProfilePageProps) {
+  const { profile, isLoading, error } = useProfile(userId);
 
   if (isLoading) {
     return <FullscreenLoadingState />;
@@ -41,7 +45,7 @@ export function ProfilePage() {
         <CardContent sx={{ p: 4 }}>
           <Stack spacing={2.5}>
             <Typography variant="overline" color="text.secondary">
-              Contributor Profile
+              {userId ? "Public Contributor Profile" : "Contributor Profile"}
             </Typography>
             <Typography variant="h4" sx={{ fontWeight: 800 }}>
               {profile.username}
@@ -58,8 +62,9 @@ export function ProfilePage() {
               }}
             />
             <Typography variant="body1" color="text.secondary">
-              Contributions are the user’s published, valid datasets that are visible to everyone.
+              Contributions are the user&apos;s published, valid datasets that are visible to everyone.
             </Typography>
+
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
                 Contributions
@@ -81,6 +86,60 @@ export function ProfilePage() {
                         </ListItemButton>
                       </ListItem>
                       {index < profile.contributions.length - 1 ? <Divider /> : null}
+                    </Box>
+                  ))}
+                </List>
+              )}
+            </Box>
+
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
+                Uploaded Datasets
+              </Typography>
+              {profile.uploaded_datasets.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No public uploaded datasets yet.
+                </Typography>
+              ) : (
+                <List disablePadding>
+                  {profile.uploaded_datasets.map((dataset, index) => (
+                    <Box key={dataset.id}>
+                      <ListItem disablePadding>
+                        <ListItemButton onClick={() => navigate(`/datasets/${dataset.id}`)}>
+                          <ListItemText
+                            primary={dataset.title}
+                            secondary={`${dataset.type} | ${new Date(dataset.created_at).toLocaleDateString()}`}
+                          />
+                        </ListItemButton>
+                      </ListItem>
+                      {index < profile.uploaded_datasets.length - 1 ? <Divider /> : null}
+                    </Box>
+                  ))}
+                </List>
+              )}
+            </Box>
+
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
+                Completed Jobs
+              </Typography>
+              {profile.completed_jobs.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No completed jobs recorded yet.
+                </Typography>
+              ) : (
+                <List disablePadding>
+                  {profile.completed_jobs.map((job, index) => (
+                    <Box key={job.id}>
+                      <ListItem disablePadding>
+                        <ListItemButton onClick={() => navigate(`/datasets/${job.id}`)}>
+                          <ListItemText
+                            primary={job.title}
+                            secondary={`completed | ${new Date(job.created_at).toLocaleDateString()}`}
+                          />
+                        </ListItemButton>
+                      </ListItem>
+                      {index < profile.completed_jobs.length - 1 ? <Divider /> : null}
                     </Box>
                   ))}
                 </List>

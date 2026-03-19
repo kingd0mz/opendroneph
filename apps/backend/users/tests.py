@@ -4,7 +4,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from datasets.models import Dataset, DatasetStatus, DatasetType, LicenseType, PlatformType, ValidationStatus
+from datasets.models import Dataset, DatasetStatus, DatasetType, JobActivity, JobActivityStatus, LicenseType, PlatformType, ValidationStatus
 from users.models import User
 
 
@@ -127,6 +127,8 @@ def test_users_me_returns_contribution_count(footprint):
         "username": "contributor",
         "contribution_count": 3,
         "contributions": expected_contributions,
+        "uploaded_datasets": expected_contributions,
+        "completed_jobs": [],
     }
 
 
@@ -176,6 +178,32 @@ def test_public_profile_returns_contribution_count(footprint):
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["username"] == "public"
     assert response.json()["contribution_count"] == 0
+
+
+@pytest.mark.django_db
+def test_public_profile_returns_completed_jobs(footprint):
+    user = User.objects.create_user(email="worker@example.com", password="testpass123")
+    raw_job = _create_dataset(
+        user=user,
+        footprint=footprint,
+        dataset_type=DatasetType.RAW,
+        status_value=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+    )
+    JobActivity.objects.create(dataset=raw_job, user=user, status=JobActivityStatus.COMPLETED)
+
+    response = APIClient().get(reverse("user-profile", args=[user.id]))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["completed_jobs"] == [
+        {
+            "id": str(raw_job.id),
+            "title": raw_job.title,
+            "status": raw_job.status,
+            "validation_status": raw_job.validation_status,
+            "created_at": JobActivity.objects.get(dataset=raw_job, user=user).updated_at.isoformat().replace("+00:00", "Z"),
+        }
+    ]
 
 
 @pytest.mark.django_db

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 
 import { ApiError } from "../services/api";
-import { fetchMyProfile } from "../services/users";
+import { fetchMyProfile, fetchUserProfile } from "../services/users";
 import type { UserProfile } from "../types/user";
 
-export function useProfile() {
+export function useProfile(userId?: string | null) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -15,7 +15,7 @@ export function useProfile() {
     async function loadProfile() {
       try {
         setIsLoading(true);
-        const result = await fetchMyProfile();
+        const result = userId ? await fetchUserProfile(userId) : await fetchMyProfile();
         if (!isMounted) {
           return;
         }
@@ -38,7 +38,7 @@ export function useProfile() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [userId]);
 
   return { profile, isLoading, error };
 }

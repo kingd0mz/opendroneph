@@ -1,3 +1,4 @@
+import json
 import hashlib
 from pathlib import Path
 
@@ -13,7 +14,10 @@ from datasets.models import (
     DatasetAsset,
     DatasetAssetType,
     DatasetStatus,
+    DatasetType,
     DownloadEvent,
+    JobActivity,
+    JobActivityStatus,
     LicenseType,
     PHBoundary,
     PlatformType,
@@ -594,3 +598,138 @@ def test_upload_metadata_fields_are_not_required_in_request(api_client, uploader
     )
 
     assert response.status_code == status.HTTP_201_CREATED
+
+
+@pytest.mark.django_db
+def test_create_orthophoto_dataset_without_source_dataset_succeeds(api_client, uploader, inside_ph_footprint):
+    api_client.force_login(uploader)
+
+    response = api_client.post(
+        reverse("dataset-list"),
+        {
+            "title": "Ortho without source",
+            "description": "No raw link",
+            "type": DatasetType.ORTHOPHOTO,
+            "footprint": json.loads(inside_ph_footprint.geojson),
+            "capture_date": "2026-01-01",
+            "platform_type": PlatformType.DRONE,
+            "camera_model": "Camera",
+            "license_type": LicenseType.CC_BY,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["source_dataset"] is None
+
+
+@pytest.mark.django_db
+def test_create_orthophoto_dataset_accepts_optional_source_dataset_id(api_client, uploader, inside_ph_footprint):
+    source_dataset = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+        dataset_type=DatasetType.RAW,
+    )
+    api_client.force_login(uploader)
+
+    response = api_client.post(
+        reverse("dataset-list"),
+        {
+            "title": "Ortho with source",
+            "description": "Linked for reference",
+            "type": DatasetType.ORTHOPHOTO,
+            "source_dataset_id": str(source_dataset.id),
+            "footprint": json.loads(inside_ph_footprint.geojson),
+            "capture_date": "2026-01-01",
+            "platform_type": PlatformType.DRONE,
+            "camera_model": "Camera",
+            "license_type": LicenseType.CC_BY,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["source_dataset"]["id"] == str(source_dataset.id)
+    assert response.json()["source_dataset"]["title"] == source_dataset.title
+
+
+@pytest.mark.django_db
+def test_jobs_list_returns_published_raw_datasets_with_active_summary(api_client, uploader, verified_user, inside_ph_footprint):
+    raw_job = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+        dataset_type=DatasetType.RAW,
+    )
+    _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+        dataset_type=DatasetType.ORTHOPHOTO,
+    )
+    JobActivity.objects.create(dataset=raw_job, user=verified_user, status=JobActivityStatus.ACTIVE)
+
+    response = api_client.get(reverse("job-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.json()) == 1
+    assert response.json()[0]["id"] == str(raw_job.id)
+    assert response.json()[0]["active_user_count"] == 1
+    assert response.json()[0]["active_usernames"] == ["verified"]
+
+
+@pytest.mark.django_db
+def test_multiple_users_can_start_same_job_and_activity_lists_all(
+    api_client,
+    uploader,
+    verified_user,
+    another_verified_user,
+    inside_ph_footprint,
+):
+    raw_job = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+        dataset_type=DatasetType.RAW,
+    )
+
+    api_client.force_login(verified_user)
+    start_response = api_client.post(reverse("job-start", args=[raw_job.id]))
+    assert start_response.status_code == status.HTTP_201_CREATED
+
+    api_client.force_login(another_verified_user)
+    second_start_response = api_client.post(reverse("job-start", args=[raw_job.id]))
+    assert second_start_response.status_code == status.HTTP_201_CREATED
+
+    activity_response = api_client.get(reverse("job-activity", args=[raw_job.id]))
+
+    assert activity_response.status_code == status.HTTP_200_OK
+    usernames = {entry["user"]["username"] for entry in activity_response.json()["active_users"]}
+    assert usernames == {"verified", "another"}
+    assert activity_response.json()["completed_users"] == []
+
+
+@pytest.mark.django_db
+def test_job_complete_moves_user_to_completed_list(api_client, uploader, verified_user, inside_ph_footprint):
+    raw_job = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+        dataset_type=DatasetType.RAW,
+    )
+    JobActivity.objects.create(dataset=raw_job, user=verified_user, status=JobActivityStatus.ACTIVE)
+    api_client.force_login(verified_user)
+
+    complete_response = api_client.post(reverse("job-complete", args=[raw_job.id]))
+    activity_response = api_client.get(reverse("job-activity", args=[raw_job.id]))
+
+    assert complete_response.status_code == status.HTTP_200_OK
+    assert activity_response.status_code == status.HTTP_200_OK
+    assert activity_response.json()["active_users"] == []
+    assert [entry["user"]["username"] for entry in activity_response.json()["completed_users"]] == ["verified"]

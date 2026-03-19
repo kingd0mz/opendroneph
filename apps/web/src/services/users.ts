@@ -26,6 +26,11 @@ export async function fetchMyProfile(): Promise<UserProfile> {
   return response.data;
 }
 
+export async function fetchUserProfile(userId: string): Promise<UserProfile> {
+  const response = await api.get<UserProfile>(`/users/${userId}/`);
+  return response.data;
+}
+
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
   const response = await api.get<LeaderboardEntry[]>("/leaderboard/");
   return response.data;

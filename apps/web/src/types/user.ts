@@ -7,6 +7,14 @@ export interface UserContribution {
   created_at: string;
 }
 
+export interface CompletedJob {
+  id: string;
+  title: string;
+  status: string;
+  validation_status: string;
+  created_at: string;
+}
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -20,6 +28,8 @@ export interface UserProfile {
   username: string;
   contribution_count: number;
   contributions: UserContribution[];
+  uploaded_datasets: UserContribution[];
+  completed_jobs: CompletedJob[];
 }
 
 export interface LeaderboardEntry {
