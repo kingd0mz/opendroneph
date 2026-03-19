@@ -1,5 +1,6 @@
 import { api } from "./api";
 import type {
+  CreateDatasetInput,
   Dataset,
   DatasetApiItem,
   DatasetAssetSummary,
@@ -7,6 +8,7 @@ import type {
   DatasetDetailApiItem,
   DatasetDownloadApiResponse,
   DatasetDownloadResult,
+  UploadDatasetAssetInput,
 } from "../types/dataset";
 
 function normalizeDataset(item: DatasetApiItem): Dataset {
@@ -55,6 +57,43 @@ export async function fetchPublishedDatasets(): Promise<Dataset[]> {
 export async function fetchDatasetDetail(datasetId: string): Promise<DatasetDetail> {
   const response = await api.get<DatasetDetailApiItem>(`/datasets/${datasetId}/`);
   return normalizeDatasetDetail(response.data);
+}
+
+export async function createDataset(input: CreateDatasetInput): Promise<{ id: string }> {
+  const response = await api.post<{ id: string }>("/datasets/", {
+    title: input.title,
+    description: input.description,
+    type: input.type,
+    footprint: input.footprint,
+    capture_date: input.captureDate,
+    platform_type: "drone",
+    camera_model: "Unknown",
+    license_type: "cc_by",
+  });
+
+  return response.data;
+}
+
+export async function uploadDatasetAsset(input: UploadDatasetAssetInput): Promise<void> {
+  const formData = new FormData();
+  formData.append("asset_type", input.assetType);
+  formData.append("file", input.file);
+
+  await api.post(`/datasets/${input.datasetId}/upload-asset/`, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+    onUploadProgress: (event) => {
+      if (!input.onProgress || !event.total) {
+        return;
+      }
+      input.onProgress(Math.round((event.loaded / event.total) * 100));
+    },
+  });
+}
+
+export async function publishDataset(datasetId: string): Promise<void> {
+  await api.post(`/datasets/${datasetId}/publish/`);
 }
 
 export async function downloadDataset(datasetId: string): Promise<DatasetDownloadResult> {

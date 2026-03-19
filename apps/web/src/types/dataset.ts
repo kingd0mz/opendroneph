@@ -87,3 +87,18 @@ export interface DatasetDownloadResult {
   downloadUrl: string | null;
   downloadEventId: string;
 }
+
+export interface CreateDatasetInput {
+  title: string;
+  description: string;
+  type: DatasetType;
+  footprint: GeoJSON.MultiPolygon;
+  captureDate: string;
+}
+
+export interface UploadDatasetAssetInput {
+  datasetId: string;
+  assetType: "raw_archive" | "orthophoto_cog";
+  file: File;
+  onProgress?: (progress: number) => void;
+}

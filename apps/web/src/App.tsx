@@ -5,6 +5,7 @@ import { DatasetDetailPage } from "./pages/DatasetDetailPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { MapPage } from "./pages/MapPage";
 import { ProfilePage } from "./pages/ProfilePage";
+import { UploadPage } from "./pages/UploadPage";
 
 function App() {
   const pathname = usePathname();
@@ -13,6 +14,8 @@ function App() {
   let page = <MapPage />;
   if (pathname === "/profile") {
     page = <ProfilePage />;
+  } else if (pathname === "/upload") {
+    page = <UploadPage />;
   } else if (pathname === "/leaderboard") {
     page = <LeaderboardPage />;
   } else if (datasetMatch) {

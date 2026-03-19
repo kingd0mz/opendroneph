@@ -10,12 +10,13 @@ export function MapShell({ children }: PropsWithChildren) {
 
   const links = [
     { label: "Map", to: "/" },
+    { label: "Upload", to: "/upload" },
     { label: "Leaderboard", to: "/leaderboard" },
     { label: "Profile", to: "/profile" },
   ];
 
   function handleNavigate(to: string) {
-    if (to === "/profile" && !isAuthenticated) {
+    if ((to === "/profile" || to === "/upload") && !isAuthenticated) {
       openLoginModal(() => navigate(to));
       return;
     }
@@ -25,7 +26,7 @@ export function MapShell({ children }: PropsWithChildren) {
 
   async function handleLogout() {
     await logout();
-    if (pathname === "/profile") {
+    if (pathname === "/profile" || pathname === "/upload") {
       navigate("/");
     }
   }
