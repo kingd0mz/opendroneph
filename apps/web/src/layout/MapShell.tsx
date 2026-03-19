@@ -9,7 +9,7 @@ export function MapShell({ children }: PropsWithChildren) {
   const { isAuthenticated, loading, logout, openLoginModal, user } = useAuth();
 
   const links = [
-    { label: "Map", to: "/" },
+    { label: "Home", to: "/" },
     { label: "Jobs", to: "/jobs" },
     { label: "Upload", to: "/upload" },
     { label: "Leaderboard", to: "/leaderboard" },

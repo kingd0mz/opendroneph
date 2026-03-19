@@ -4,7 +4,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from datasets.models import Dataset, DatasetStatus, DatasetType, JobActivity, JobActivityStatus, LicenseType, PlatformType, ValidationStatus
+from datasets.models import AOI, AOIPurpose, Dataset, DatasetStatus, DatasetType, JobActivity, JobActivityStatus, LicenseType, PlatformType, ValidationStatus
 from users.models import User
 
 
@@ -36,6 +36,16 @@ def _create_dataset(*, user: User, footprint: MultiPolygon, dataset_type: str, s
         platform_type=PlatformType.DRONE,
         camera_model="Camera",
         license_type=LicenseType.CC_BY,
+    )
+
+
+def _create_aoi(*, footprint: MultiPolygon, title="AOI"):
+    return AOI.objects.create(
+        title=title,
+        description="Priority area",
+        geometry=footprint,
+        purpose=AOIPurpose.DISASTER,
+        is_active=True,
     )
 
 
@@ -74,13 +84,16 @@ def test_users_me_returns_contribution_count(footprint):
         password="testpass123",
         is_email_verified=True,
     )
-    _create_dataset(
+    aoi = _create_aoi(footprint=footprint, title="Flood Area")
+    linked_dataset = _create_dataset(
         user=user,
         footprint=footprint,
         dataset_type=DatasetType.RAW,
         status_value=DatasetStatus.PUBLISHED,
         validation_status=ValidationStatus.VALID,
     )
+    linked_dataset.aoi = aoi
+    linked_dataset.save(update_fields=["aoi"])
     _create_dataset(
         user=user,
         footprint=footprint,
@@ -126,9 +139,19 @@ def test_users_me_returns_contribution_count(footprint):
         "id": str(user.id),
         "username": "contributor",
         "contribution_count": 3,
+        "dataset_count": 3,
         "contributions": expected_contributions,
         "uploaded_datasets": expected_contributions,
         "completed_jobs": [],
+        "aois_contributed_to": [
+            {
+                "id": str(aoi.id),
+                "title": aoi.title,
+                "purpose": aoi.purpose,
+                "is_active": aoi.is_active,
+                "created_at": aoi.created_at.isoformat().replace("+00:00", "Z"),
+            }
+        ],
     }
 
 
@@ -178,6 +201,7 @@ def test_public_profile_returns_contribution_count(footprint):
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["username"] == "public"
     assert response.json()["contribution_count"] == 0
+    assert response.json()["dataset_count"] == 0
 
 
 @pytest.mark.django_db
@@ -202,6 +226,34 @@ def test_public_profile_returns_completed_jobs(footprint):
             "status": raw_job.status,
             "validation_status": raw_job.validation_status,
             "created_at": JobActivity.objects.get(dataset=raw_job, user=user).updated_at.isoformat().replace("+00:00", "Z"),
+        }
+    ]
+
+
+@pytest.mark.django_db
+def test_public_profile_returns_aois_contributed_to(footprint):
+    user = User.objects.create_user(email="mapper@example.com", password="testpass123")
+    aoi = _create_aoi(footprint=footprint, title="Coastal AOI")
+    dataset = _create_dataset(
+        user=user,
+        footprint=footprint,
+        dataset_type=DatasetType.ORTHOPHOTO,
+        status_value=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+    )
+    dataset.aoi = aoi
+    dataset.save(update_fields=["aoi"])
+
+    response = APIClient().get(reverse("user-profile", args=[user.id]))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["aois_contributed_to"] == [
+        {
+            "id": str(aoi.id),
+            "title": aoi.title,
+            "purpose": aoi.purpose,
+            "is_active": aoi.is_active,
+            "created_at": aoi.created_at.isoformat().replace("+00:00", "Z"),
         }
     ]
 

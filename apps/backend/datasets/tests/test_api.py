@@ -10,6 +10,8 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from datasets.models import (
+    AOI,
+    AOIPurpose,
     Dataset,
     DatasetAsset,
     DatasetAssetType,
@@ -118,11 +120,13 @@ def _make_dataset(
     status=DatasetStatus.DRAFT,
     validation_status=ValidationStatus.PENDING,
     dataset_type="orthophoto",
+    aoi=None,
 ):
     return Dataset.objects.create(
         title="Dataset",
         description="Dataset description",
         uploader=owner,
+        aoi=aoi,
         footprint=footprint,
         type=dataset_type,
         status=status,
@@ -149,6 +153,16 @@ def _add_asset(dataset: Dataset, path: Path, asset_type=DatasetAssetType.ORTHOPH
 
 def _uploaded_file(name: str, source_path: Path, content_type: str) -> SimpleUploadedFile:
     return SimpleUploadedFile(name, source_path.read_bytes(), content_type=content_type)
+
+
+def _make_aoi(*, geometry: MultiPolygon, purpose=AOIPurpose.DISASTER, title="AOI"):
+    return AOI.objects.create(
+        title=title,
+        description="Priority area",
+        geometry=geometry,
+        purpose=purpose,
+        is_active=True,
+    )
 
 
 @pytest.mark.django_db
@@ -653,6 +667,104 @@ def test_create_orthophoto_dataset_accepts_optional_source_dataset_id(api_client
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json()["source_dataset"]["id"] == str(source_dataset.id)
     assert response.json()["source_dataset"]["title"] == source_dataset.title
+
+
+@pytest.mark.django_db
+def test_create_dataset_accepts_optional_aoi_id(api_client, uploader, inside_ph_footprint):
+    aoi = _make_aoi(geometry=inside_ph_footprint, title="Flood AOI")
+    api_client.force_login(uploader)
+
+    response = api_client.post(
+        reverse("dataset-list"),
+        {
+            "title": "Raw with AOI",
+            "description": "Linked to active area",
+            "type": DatasetType.RAW,
+            "aoi_id": str(aoi.id),
+            "footprint": json.loads(inside_ph_footprint.geojson),
+            "capture_date": "2026-01-01",
+            "platform_type": PlatformType.DRONE,
+            "camera_model": "Camera",
+            "license_type": LicenseType.CC_BY,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["aoi"]["id"] == str(aoi.id)
+    assert response.json()["aoi"]["title"] == aoi.title
+
+
+@pytest.mark.django_db
+def test_aoi_list_returns_progress_counts_for_public_datasets(api_client, uploader, inside_ph_footprint):
+    aoi = _make_aoi(geometry=inside_ph_footprint, title="Disaster AOI")
+    _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+        dataset_type=DatasetType.RAW,
+        aoi=aoi,
+    )
+    _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+        dataset_type=DatasetType.ORTHOPHOTO,
+        aoi=aoi,
+    )
+    _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.DRAFT,
+        validation_status=ValidationStatus.VALID,
+        dataset_type=DatasetType.RAW,
+        aoi=aoi,
+    )
+
+    response = api_client.get(reverse("aoi-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()[0]["id"] == str(aoi.id)
+    assert response.json()[0]["raw_count"] == 1
+    assert response.json()[0]["orthophoto_count"] == 1
+
+
+@pytest.mark.django_db
+def test_aoi_datasets_returns_public_raw_and_orthophotos(api_client, uploader, inside_ph_footprint):
+    aoi = _make_aoi(geometry=inside_ph_footprint, title="Mapping Need")
+    raw_dataset = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+        dataset_type=DatasetType.RAW,
+        aoi=aoi,
+    )
+    orthophoto = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+        dataset_type=DatasetType.ORTHOPHOTO,
+        aoi=aoi,
+    )
+    _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        status=DatasetStatus.DRAFT,
+        validation_status=ValidationStatus.VALID,
+        dataset_type=DatasetType.RAW,
+        aoi=aoi,
+    )
+
+    response = api_client.get(reverse("aoi-datasets", args=[aoi.id]))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["aoi"]["id"] == str(aoi.id)
+    assert [item["id"] for item in response.json()["raw_datasets"]] == [str(raw_dataset.id)]
+    assert [item["id"] for item in response.json()["orthophotos"]] == [str(orthophoto.id)]
 
 
 @pytest.mark.django_db

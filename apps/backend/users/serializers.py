@@ -1,7 +1,7 @@
 from django.contrib.auth import authenticate
 from rest_framework import serializers
 
-from datasets.models import Dataset, JobActivity
+from datasets.models import AOI, Dataset, JobActivity
 from users.services import user_display_name
 
 
@@ -51,13 +51,28 @@ class CompletedJobSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class UserAOISerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AOI
+        fields = [
+            "id",
+            "title",
+            "purpose",
+            "is_active",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
 class UserProfileSerializer(serializers.Serializer):
     id = serializers.UUIDField(read_only=True)
     username = serializers.SerializerMethodField()
     contribution_count = serializers.IntegerField(read_only=True)
+    dataset_count = serializers.SerializerMethodField()
     contributions = serializers.SerializerMethodField()
     uploaded_datasets = serializers.SerializerMethodField()
     completed_jobs = serializers.SerializerMethodField()
+    aois_contributed_to = serializers.SerializerMethodField()
 
     def get_username(self, obj):
         return user_display_name(obj)
@@ -71,6 +86,15 @@ class UserProfileSerializer(serializers.Serializer):
             ).order_by("-created_at")
         return UserContributionSerializer(contributions, many=True).data
 
+    def get_dataset_count(self, obj):
+        contributions = getattr(obj, "public_contributions", None)
+        if contributions is None:
+            contributions = obj.uploaded_datasets.filter(
+                status="published",
+                validation_status="valid",
+            )
+        return len(contributions)
+
     def get_uploaded_datasets(self, obj):
         return self.get_contributions(obj)
 
@@ -83,6 +107,16 @@ class UserProfileSerializer(serializers.Serializer):
                 dataset__status="published",
             ).select_related("dataset").order_by("-updated_at")
         return CompletedJobSerializer(completed_jobs, many=True).data
+
+    def get_aois_contributed_to(self, obj):
+        aois = getattr(obj, "public_aois", None)
+        if aois is None:
+            aois = AOI.objects.filter(
+                datasets__uploader=obj,
+                datasets__status="published",
+                datasets__validation_status="valid",
+            ).distinct().order_by("title")
+        return UserAOISerializer(aois, many=True).data
 
 
 class LeaderboardEntrySerializer(serializers.Serializer):

@@ -1,5 +1,10 @@
 import { api } from "./api";
 import type {
+  AOI,
+  AOIApiItem,
+  AOIDatasets,
+  AOIDatasetsApiResponse,
+  AOISummary,
   CreateDatasetInput,
   Dataset,
   DatasetApiItem,
@@ -16,11 +21,39 @@ import type {
   UploadDatasetAssetInput,
 } from "../types/dataset";
 
+function normalizeAoiSummary(item: {
+  id: string;
+  title: string;
+  description: string;
+  purpose: AOIApiItem["purpose"];
+  is_active: boolean;
+  created_at: string;
+}): AOISummary {
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    purpose: item.purpose,
+    isActive: item.is_active,
+    createdAt: item.created_at,
+  };
+}
+
+function normalizeAoi(item: AOIApiItem): AOI {
+  return {
+    ...normalizeAoiSummary(item),
+    geometry: item.geometry,
+    rawCount: item.raw_count,
+    orthophotoCount: item.orthophoto_count,
+  };
+}
+
 function normalizeDataset(item: DatasetApiItem): Dataset {
   return {
     id: item.id,
     title: item.title,
     footprint: item.footprint,
+    aoi: item.aoi ? normalizeAoiSummary(item.aoi) : null,
     dataType: item.data_type ?? item.type ?? "orthophoto",
     createdAt: item.created_at,
   };
@@ -58,6 +91,7 @@ function normalizeDatasetDetail(item: DatasetDetailApiItem): DatasetDetail {
     title: item.title,
     description: item.description,
     uploader: item.uploader,
+    aoi: item.aoi ? normalizeAoiSummary(item.aoi) : null,
     sourceDataset: item.source_dataset ? normalizeDatasetReference(item.source_dataset) : null,
     dataType: item.data_type,
     status: item.status,
@@ -117,6 +151,7 @@ export async function createDataset(input: CreateDatasetInput): Promise<{ id: st
     title: input.title,
     description: input.description,
     type: input.type,
+    aoi_id: input.aoiId,
     source_dataset_id: input.sourceDatasetId,
     footprint: input.footprint,
     capture_date: input.captureDate,
@@ -176,4 +211,18 @@ export async function completeJob(datasetId: string): Promise<void> {
 export async function fetchJobActivity(datasetId: string): Promise<JobActivity> {
   const response = await api.get<JobActivityApiResponse>(`/jobs/${datasetId}/activity/`);
   return normalizeJobActivity(response.data);
+}
+
+export async function fetchAois(): Promise<AOI[]> {
+  const response = await api.get<AOIApiItem[]>("/aois/");
+  return response.data.map(normalizeAoi);
+}
+
+export async function fetchAoiDatasets(aoiId: string): Promise<AOIDatasets> {
+  const response = await api.get<AOIDatasetsApiResponse>(`/aois/${aoiId}/datasets/`);
+  return {
+    aoi: normalizeAoi(response.data.aoi),
+    rawDatasets: response.data.raw_datasets.map(normalizeDatasetDetail),
+    orthophotos: response.data.orthophotos.map(normalizeDatasetDetail),
+  };
 }

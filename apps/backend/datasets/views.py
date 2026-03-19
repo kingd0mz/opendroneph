@@ -4,7 +4,8 @@ import os
 import tempfile
 from uuid import uuid4
 
-from django.db.models import Prefetch, Q
+from django.db.models import Count, Prefetch, Q
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -13,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from datasets.models import (
+    AOI,
     Dataset,
     DatasetAsset,
     DatasetStatus,
@@ -23,6 +25,7 @@ from datasets.models import (
     ValidationStatus,
 )
 from datasets.serializers import (
+    AOISerializer,
     DatasetDetailSerializer,
     DatasetAssetSerializer,
     DatasetAssetUploadSerializer,
@@ -34,11 +37,36 @@ from datasets.services.storage import generate_dataset_asset_download_url, uploa
 from datasets.services.validation import validate_ph_boundary_intersection, validate_strict_cog
 
 
+def _public_dataset_filter():
+    return Q(
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+    )
+
+
+def _public_aoi_dataset_filter():
+    return Q(
+        datasets__status=DatasetStatus.PUBLISHED,
+        datasets__validation_status=ValidationStatus.VALID,
+    )
+
+
+def _visible_dataset_filter(user):
+    public_filter = _public_dataset_filter()
+    if user and user.is_authenticated:
+        return public_filter | Q(uploader=user)
+    return public_filter
+
+
+def _public_aoi_dataset_queryset():
+    return Dataset.objects.filter(_public_dataset_filter()).select_related("uploader", "aoi", "source_dataset").prefetch_related("assets")
+
+
 def _job_dataset_queryset():
     return Dataset.objects.filter(
         type=DatasetType.RAW,
         status=DatasetStatus.PUBLISHED,
-    ).select_related("uploader").prefetch_related(
+    ).select_related("uploader", "aoi").prefetch_related(
         Prefetch(
             "job_activities",
             queryset=JobActivity.objects.filter(status=JobActivityStatus.ACTIVE).select_related("user").order_by("created_at"),
@@ -52,12 +80,28 @@ def _get_job_dataset(dataset_id):
         pk=dataset_id,
         type=DatasetType.RAW,
         status=DatasetStatus.PUBLISHED,
-    ).select_related("uploader").first()
+    ).select_related("uploader", "aoi").first()
+
+
+def _aoi_queryset():
+    public_filter = _public_aoi_dataset_filter()
+    return AOI.objects.annotate(
+        raw_count=Count(
+            "datasets",
+            filter=Q(datasets__type=DatasetType.RAW) & public_filter,
+            distinct=True,
+        ),
+        orthophoto_count=Count(
+            "datasets",
+            filter=Q(datasets__type=DatasetType.ORTHOPHOTO) & public_filter,
+            distinct=True,
+        ),
+    ).order_by("-is_active", "title")
 
 
 class DatasetViewSet(viewsets.ModelViewSet):
     serializer_class = DatasetSerializer
-    queryset = Dataset.objects.select_related("uploader", "source_dataset").prefetch_related("assets")
+    queryset = Dataset.objects.select_related("uploader", "aoi", "source_dataset").prefetch_related("assets")
     http_method_names = ["get", "post"]
 
     def get_serializer_class(self):
@@ -66,14 +110,7 @@ class DatasetViewSet(viewsets.ModelViewSet):
         return super().get_serializer_class()
 
     def _visible_dataset_filter(self):
-        public_filter = Q(
-            status=DatasetStatus.PUBLISHED,
-            validation_status=ValidationStatus.VALID,
-        )
-        user = self.request.user
-        if user and user.is_authenticated:
-            return public_filter | Q(uploader=user)
-        return public_filter
+        return _visible_dataset_filter(self.request.user)
 
     def get_queryset(self):
         if self.action in {"list", "retrieve"}:
@@ -225,6 +262,33 @@ class JobListView(APIView):
     def get(self, request):
         serializer = JobListDatasetSerializer(_job_dataset_queryset().order_by("-created_at"), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class AOIListView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        serializer = AOISerializer(_aoi_queryset(), many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class AOIDatasetsView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, aoi_id):
+        aoi = get_object_or_404(_aoi_queryset(), pk=aoi_id)
+        datasets = _public_aoi_dataset_queryset().filter(aoi=aoi).order_by("-created_at")
+        raw_datasets = datasets.filter(type=DatasetType.RAW)
+        orthophotos = datasets.filter(type=DatasetType.ORTHOPHOTO)
+
+        return Response(
+            {
+                "aoi": AOISerializer(aoi).data,
+                "raw_datasets": DatasetDetailSerializer(raw_datasets, many=True).data,
+                "orthophotos": DatasetDetailSerializer(orthophotos, many=True).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class JobStartView(APIView):

@@ -174,6 +174,15 @@ export function DatasetDetailPage({ datasetId }: DatasetDetailPageProps) {
                 <Typography variant="body2"><strong>Data type:</strong> {dataset.dataType}</Typography>
                 <Typography variant="body2"><strong>Status:</strong> {dataset.status}</Typography>
                 <Typography variant="body2"><strong>Created:</strong> {formatDate(dataset.createdAt)}</Typography>
+                {dataset.aoi ? (
+                  <Typography
+                    variant="body2"
+                    sx={{ cursor: "pointer" }}
+                    onClick={() => navigate(`/aois/${dataset.aoi?.id}`)}
+                  >
+                    <strong>AOI:</strong> {dataset.aoi.title}
+                  </Typography>
+                ) : null}
                 <Typography
                   variant="body2"
                   sx={{ cursor: "pointer" }}

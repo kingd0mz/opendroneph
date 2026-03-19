@@ -1,3 +1,5 @@
+import type { AOISummary } from "./dataset";
+
 export interface UserContribution {
   id: string;
   title: string;
@@ -27,9 +29,11 @@ export interface UserProfile {
   id: string;
   username: string;
   contribution_count: number;
+  dataset_count: number;
   contributions: UserContribution[];
   uploaded_datasets: UserContribution[];
   completed_jobs: CompletedJob[];
+  aois_contributed_to: AOISummary[];
 }
 
 export interface LeaderboardEntry {

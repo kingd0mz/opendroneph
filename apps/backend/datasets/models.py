@@ -59,6 +59,31 @@ class PHBoundary(models.Model):
         return self.name
 
 
+class AOIPurpose(models.TextChoices):
+    DISASTER = "disaster", "Disaster Response"
+    LANDCOVER = "landcover", "Land Cover Validation"
+    BENTHIC = "benthic", "Benthic Habitat Mapping"
+
+
+class AOI(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    geometry = models.MultiPolygonField(srid=4326, spatial_index=True)
+    purpose = models.CharField(max_length=20, choices=AOIPurpose.choices)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            GistIndex(fields=["geometry"], name="aoi_geometry_gix"),
+            models.Index(fields=["is_active"], name="aoi_is_active_idx"),
+        ]
+
+    def __str__(self):
+        return self.title
+
+
 class Dataset(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255)
@@ -67,6 +92,13 @@ class Dataset(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="uploaded_datasets",
+    )
+    aoi = models.ForeignKey(
+        AOI,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="datasets",
     )
     source_dataset = models.ForeignKey(
         "self",

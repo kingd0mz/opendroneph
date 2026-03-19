@@ -4,6 +4,7 @@ import { MapShell } from "./layout/MapShell";
 import { DatasetDetailPage } from "./pages/DatasetDetailPage";
 import { JobsPage } from "./pages/JobsPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
+import { AOIPage } from "./pages/AOIPage";
 import { MapPage } from "./pages/MapPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { UploadPage } from "./pages/UploadPage";
@@ -11,6 +12,7 @@ import { UploadPage } from "./pages/UploadPage";
 function App() {
   const pathname = usePathname();
   const datasetMatch = pathname.match(/^\/datasets\/([^/]+)\/?$/);
+  const aoiMatch = pathname.match(/^\/aois\/([^/]+)\/?$/);
   const userMatch = pathname.match(/^\/users\/([^/]+)\/?$/);
 
   let page = <MapPage />;
@@ -22,6 +24,8 @@ function App() {
     page = <UploadPage />;
   } else if (pathname === "/leaderboard") {
     page = <LeaderboardPage />;
+  } else if (aoiMatch) {
+    page = <AOIPage aoiId={aoiMatch[1] ?? null} />;
   } else if (userMatch) {
     page = <ProfilePage userId={userMatch[1] ?? null} />;
   } else if (datasetMatch) {

@@ -51,7 +51,7 @@ export function ProfilePage({ userId = null }: ProfilePageProps) {
               {profile.username}
             </Typography>
             <Chip
-              label={`${profile.contribution_count} contributions`}
+              label={`${profile.dataset_count} datasets uploaded`}
               sx={{
                 alignSelf: "flex-start",
                 px: 1,
@@ -64,6 +64,33 @@ export function ProfilePage({ userId = null }: ProfilePageProps) {
             <Typography variant="body1" color="text.secondary">
               Contributions are the user&apos;s published, valid datasets that are visible to everyone.
             </Typography>
+
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
+                AOIs Contributed To
+              </Typography>
+              {profile.aois_contributed_to.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No AOI-linked public datasets yet.
+                </Typography>
+              ) : (
+                <List disablePadding>
+                  {profile.aois_contributed_to.map((aoi, index) => (
+                    <Box key={aoi.id}>
+                      <ListItem disablePadding>
+                        <ListItemButton onClick={() => navigate(`/aois/${aoi.id}`)}>
+                          <ListItemText
+                            primary={aoi.title}
+                            secondary={aoi.purpose}
+                          />
+                        </ListItemButton>
+                      </ListItem>
+                      {index < profile.aois_contributed_to.length - 1 ? <Divider /> : null}
+                    </Box>
+                  ))}
+                </List>
+              )}
+            </Box>
 
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>

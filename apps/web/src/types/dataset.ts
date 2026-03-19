@@ -1,5 +1,21 @@
 export type DatasetType = "raw" | "orthophoto";
 export type ValidationStatus = "pending" | "valid" | "invalid";
+export type AOIPurpose = "disaster" | "landcover" | "benthic";
+
+export interface AOISummary {
+  id: string;
+  title: string;
+  description: string;
+  purpose: AOIPurpose;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface AOI extends AOISummary {
+  geometry: GeoJSON.MultiPolygon;
+  rawCount: number;
+  orthophotoCount: number;
+}
 
 export interface DatasetUploader {
   id: string;
@@ -26,6 +42,14 @@ export interface DatasetApiItem {
   id: string;
   title: string;
   footprint: GeoJSON.MultiPolygon;
+  aoi?: {
+    id: string;
+    title: string;
+    description: string;
+    purpose: AOIPurpose;
+    is_active: boolean;
+    created_at: string;
+  } | null;
   data_type?: DatasetType;
   type?: DatasetType;
   created_at: string;
@@ -40,6 +64,14 @@ export interface DatasetDetailApiItem {
     username: string;
     email: string;
   };
+  aoi: {
+    id: string;
+    title: string;
+    description: string;
+    purpose: AOIPurpose;
+    is_active: boolean;
+    created_at: string;
+  } | null;
   source_dataset: {
     id: string;
     title: string;
@@ -77,6 +109,7 @@ export interface Dataset {
   id: string;
   title: string;
   footprint: GeoJSON.MultiPolygon;
+  aoi: AOISummary | null;
   dataType: DatasetType;
   createdAt: string;
 }
@@ -86,6 +119,7 @@ export interface DatasetDetail {
   title: string;
   description: string;
   uploader: DatasetUploader;
+  aoi: AOISummary | null;
   sourceDataset: DatasetReference | null;
   dataType: DatasetType;
   status: string;
@@ -108,6 +142,7 @@ export interface CreateDatasetInput {
   type: DatasetType;
   footprint: GeoJSON.MultiPolygon;
   captureDate: string;
+  aoiId?: string;
   sourceDatasetId?: string;
 }
 
@@ -182,4 +217,28 @@ export interface JobActivity {
   };
   activeUsers: JobActivityEntry[];
   completedUsers: JobActivityEntry[];
+}
+
+export interface AOIApiItem {
+  id: string;
+  title: string;
+  description: string;
+  geometry: GeoJSON.MultiPolygon;
+  purpose: AOIPurpose;
+  is_active: boolean;
+  created_at: string;
+  raw_count: number;
+  orthophoto_count: number;
+}
+
+export interface AOIDatasetsApiResponse {
+  aoi: AOIApiItem;
+  raw_datasets: DatasetDetailApiItem[];
+  orthophotos: DatasetDetailApiItem[];
+}
+
+export interface AOIDatasets {
+  aoi: AOI;
+  rawDatasets: DatasetDetail[];
+  orthophotos: DatasetDetail[];
 }

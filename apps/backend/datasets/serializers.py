@@ -4,6 +4,7 @@ from django.contrib.gis.geos import GEOSGeometry, MultiPolygon
 from rest_framework import serializers
 
 from datasets.models import (
+    AOI,
     Dataset,
     DatasetAsset,
     DatasetAssetType,
@@ -51,6 +52,20 @@ class DatasetAssetSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "dataset", "created_at"]
+
+
+class AOISummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AOI
+        fields = [
+            "id",
+            "title",
+            "description",
+            "purpose",
+            "is_active",
+            "created_at",
+        ]
+        read_only_fields = fields
 
 
 class PublicUploaderSerializer(serializers.Serializer):
@@ -114,6 +129,7 @@ class JobActivitySerializer(serializers.ModelSerializer):
 
 class JobListDatasetSerializer(serializers.ModelSerializer):
     uploader = PublicUploaderSerializer(read_only=True)
+    aoi = AOISummarySerializer(read_only=True)
     data_type = serializers.CharField(source="type", read_only=True)
     active_user_count = serializers.SerializerMethodField()
     active_usernames = serializers.SerializerMethodField()
@@ -125,6 +141,7 @@ class JobListDatasetSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "uploader",
+            "aoi",
             "data_type",
             "status",
             "validation_status",
@@ -147,6 +164,27 @@ class JobListDatasetSerializer(serializers.ModelSerializer):
         return [user_display_name(activity.user) for activity in active_activities[:3]]
 
 
+class AOISerializer(serializers.ModelSerializer):
+    geometry = MultiPolygonGeoJSONField()
+    raw_count = serializers.IntegerField(read_only=True)
+    orthophoto_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = AOI
+        fields = [
+            "id",
+            "title",
+            "description",
+            "geometry",
+            "purpose",
+            "is_active",
+            "created_at",
+            "raw_count",
+            "orthophoto_count",
+        ]
+        read_only_fields = fields
+
+
 class DatasetAssetUploadSerializer(serializers.Serializer):
     asset_type = serializers.ChoiceField(choices=DatasetAssetType.choices)
     file = serializers.FileField()
@@ -155,6 +193,14 @@ class DatasetAssetUploadSerializer(serializers.Serializer):
 class DatasetSerializer(serializers.ModelSerializer):
     footprint = MultiPolygonGeoJSONField()
     assets = DatasetAssetSerializer(many=True, read_only=True)
+    aoi_id = serializers.PrimaryKeyRelatedField(
+        queryset=AOI.objects.filter(is_active=True),
+        source="aoi",
+        allow_null=True,
+        required=False,
+        write_only=True,
+    )
+    aoi = AOISummarySerializer(read_only=True)
     source_dataset_id = serializers.PrimaryKeyRelatedField(
         queryset=Dataset.objects.all(),
         source="source_dataset",
@@ -171,6 +217,8 @@ class DatasetSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "uploader",
+            "aoi",
+            "aoi_id",
             "source_dataset",
             "source_dataset_id",
             "footprint",
@@ -210,6 +258,7 @@ class DatasetDetailSerializer(serializers.ModelSerializer):
     footprint = MultiPolygonGeoJSONField()
     data_type = serializers.CharField(source="type", read_only=True)
     assets = PublicDatasetAssetSerializer(many=True, read_only=True)
+    aoi = AOISummarySerializer(read_only=True)
     source_dataset = DatasetSummarySerializer(read_only=True)
 
     class Meta:
@@ -219,6 +268,7 @@ class DatasetDetailSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "uploader",
+            "aoi",
             "source_dataset",
             "data_type",
             "status",

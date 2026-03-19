@@ -17,8 +17,8 @@ import { FullscreenState } from "../components/FullscreenState";
 import { useAuth } from "../context/AuthContext";
 import { navigate } from "../hooks/usePathname";
 import { ApiError } from "../services/api";
-import { createDataset, fetchDatasetDetail, publishDataset, uploadDatasetAsset } from "../services/datasets";
-import type { DatasetDetail, DatasetType, ValidationStatus } from "../types/dataset";
+import { createDataset, fetchAois, fetchDatasetDetail, publishDataset, uploadDatasetAsset } from "../services/datasets";
+import type { AOI, DatasetDetail, DatasetType, ValidationStatus } from "../types/dataset";
 
 const PLACEHOLDER_FOOTPRINT: GeoJSON.MultiPolygon = {
   type: "MultiPolygon",
@@ -54,10 +54,12 @@ function validationSeverity(status: ValidationStatus | null): "success" | "warni
 
 export function UploadPage() {
   const { isAuthenticated, loading, openLoginModal } = useAuth();
+  const [aois, setAois] = useState<AOI[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [datasetType, setDatasetType] = useState<DatasetType>("raw");
   const [captureDate, setCaptureDate] = useState(todayDate());
+  const [aoiId, setAoiId] = useState("");
   const [sourceDatasetId, setSourceDatasetId] = useState("");
   const [datasetId, setDatasetId] = useState<string | null>(null);
   const [datasetDetail, setDatasetDetail] = useState<DatasetDetail | null>(null);
@@ -77,9 +79,39 @@ export function UploadPage() {
     }
   }, [isAuthenticated, loading, openLoginModal]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAois() {
+      try {
+        const result = await fetchAois();
+        if (!isMounted) {
+          return;
+        }
+        setAois(result.filter((item) => item.isActive));
+      } catch {
+        if (isMounted) {
+          setAois([]);
+        }
+      }
+    }
+
+    const requestedAoiId = new URLSearchParams(window.location.search).get("aoi");
+    if (requestedAoiId) {
+      setAoiId(requestedAoiId);
+    }
+
+    void loadAois();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const validationStatus = datasetDetail?.validationStatus ?? null;
   const canPublish = validationStatus === "valid" && !isPublishing;
   const activeDatasetType = datasetDetail?.dataType ?? datasetType;
+  const selectedAoi = aois.find((aoi) => aoi.id === (datasetDetail?.aoi?.id ?? aoiId)) ?? datasetDetail?.aoi ?? null;
   const assetType = useMemo(
     () => (activeDatasetType === "raw" ? "raw_archive" : "orthophoto_cog"),
     [activeDatasetType],
@@ -104,6 +136,7 @@ export function UploadPage() {
         title: title.trim(),
         description: description.trim(),
         type: datasetType,
+        aoiId: aoiId.trim() || undefined,
         sourceDatasetId: datasetType === "orthophoto" && sourceDatasetId.trim() ? sourceDatasetId.trim() : undefined,
         footprint: PLACEHOLDER_FOOTPRINT,
         captureDate: captureDate || todayDate(),
@@ -139,9 +172,13 @@ export function UploadPage() {
       });
       const detail = await refreshDatasetDetail(datasetId);
       if (detail.validationStatus === "valid") {
-        setSuccessMessage("Asset uploaded. Dataset is valid and ready to publish.");
+        setSuccessMessage(
+          detail.aoi
+            ? `You contributed to ${detail.aoi.title}. Dataset is valid and ready to publish.`
+            : "Dataset added to public archive. It is valid and ready to publish.",
+        );
       } else {
-        setSuccessMessage("Asset uploaded.");
+        setSuccessMessage(detail.aoi ? `You contributed to ${detail.aoi.title}.` : "Dataset added to public archive.");
       }
     } catch (error) {
       setUploadError(error instanceof ApiError ? error.message : "Upload failed.");
@@ -243,6 +280,21 @@ export function UploadPage() {
                 InputLabelProps={{ shrink: true }}
                 fullWidth
               />
+              <TextField
+                select
+                label="AOI (optional)"
+                value={aoiId}
+                onChange={(event) => setAoiId(event.target.value)}
+                fullWidth
+                helperText="Optional context only. You can upload datasets anytime without selecting an AOI."
+              >
+                <MenuItem value="">No AOI</MenuItem>
+                {aois.map((aoi) => (
+                  <MenuItem key={aoi.id} value={aoi.id}>
+                    {aoi.title}
+                  </MenuItem>
+                ))}
+              </TextField>
               {datasetType === "orthophoto" ? (
                 <TextField
                   label="Source RAW Dataset ID (optional)"
@@ -321,6 +373,11 @@ export function UploadPage() {
                   <Typography variant="body2"><strong>Dataset ID:</strong> {datasetDetail.id}</Typography>
                   <Typography variant="body2"><strong>Status:</strong> {datasetDetail.status}</Typography>
                   <Typography variant="body2"><strong>Type:</strong> {datasetDetail.dataType}</Typography>
+                  {selectedAoi ? (
+                    <Typography variant="body2">
+                      <strong>AOI:</strong> {selectedAoi.title}
+                    </Typography>
+                  ) : null}
                   {datasetDetail.sourceDataset ? (
                     <Typography variant="body2">
                       <strong>Source RAW Dataset:</strong> {datasetDetail.sourceDataset.title} ({datasetDetail.sourceDataset.id})
