@@ -84,6 +84,39 @@ class AOI(models.Model):
         return self.title
 
 
+class MissionStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    CLOSED = "closed", "Closed"
+
+
+class Mission(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    aoi = models.ForeignKey(
+        AOI,
+        on_delete=models.PROTECT,
+        related_name="missions",
+    )
+    event_type = models.CharField(max_length=100)
+    status = models.CharField(max_length=20, choices=MissionStatus.choices, default=MissionStatus.ACTIVE)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_missions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["status"], name="mission_status_idx"),
+        ]
+
+    def __str__(self):
+        return self.title
+
+
 class Dataset(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255)
@@ -100,12 +133,19 @@ class Dataset(models.Model):
         blank=True,
         related_name="datasets",
     )
-    source_dataset = models.ForeignKey(
+    job = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="derived_datasets",
+        related_name="outputs",
+    )
+    mission = models.ForeignKey(
+        Mission,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="datasets",
     )
     footprint = models.MultiPolygonField(srid=4326, spatial_index=True)
     type = models.CharField(max_length=20, choices=DatasetType.choices)
@@ -205,34 +245,32 @@ class DownloadEvent(models.Model):
         return f"{self.dataset_id}:{self.asset_id}:{self.actor_id}"
 
 
-class JobActivityStatus(models.TextChoices):
-    ACTIVE = "active", "Active"
-    COMPLETED = "completed", "Completed"
+class DatasetFlagStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    IGNORED = "ignored", "Ignored"
 
 
-class JobActivity(models.Model):
+class DatasetFlag(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     dataset = models.ForeignKey(
         Dataset,
         on_delete=models.CASCADE,
-        related_name="job_activities",
+        related_name="flags",
     )
-    user = models.ForeignKey(
+    reason = models.TextField()
+    created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="job_activities",
+        related_name="dataset_flags",
     )
-    status = models.CharField(max_length=20, choices=JobActivityStatus.choices)
+    status = models.CharField(max_length=20, choices=DatasetFlagStatus.choices, default=DatasetFlagStatus.PENDING)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["dataset", "user"], name="job_activity_dataset_user_unique"),
-        ]
         indexes = [
-            models.Index(fields=["dataset", "status"], name="job_act_ds_status_idx"),
+            models.Index(fields=["status", "created_at"], name="dataset_flag_status_idx"),
         ]
 
     def __str__(self):
-        return f"{self.dataset_id}:{self.user_id}:{self.status}"
+        return f"{self.dataset_id}:{self.created_by_id}:{self.status}"

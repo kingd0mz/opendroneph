@@ -15,24 +15,18 @@ import { FullscreenLoadingState, FullscreenState } from "../components/Fullscree
 import { useAuth } from "../context/AuthContext";
 import { navigate } from "../hooks/usePathname";
 import { ApiError } from "../services/api";
-import { completeJob, downloadDataset, fetchJobs, startJob } from "../services/datasets";
+import { downloadDataset, fetchJobs } from "../services/datasets";
 import type { Job } from "../types/dataset";
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString();
 }
 
-function formatActivity(job: Job) {
-  if (job.activeUserCount === 0) {
-    return "No one has marked this job as active yet.";
+function jobSummary(job: Job) {
+  if (job.outputsCount >= 1) {
+    return `${job.outputsCount} orthophoto${job.outputsCount === 1 ? "" : "s"} submitted by ${job.participantsCount} contributor${job.participantsCount === 1 ? "" : "s"}.`;
   }
-
-  const [firstName] = job.activeUsernames;
-  if (job.activeUserCount === 1) {
-    return `${firstName} is working on this.`;
-  }
-
-  return `${firstName} and ${job.activeUserCount - 1} others are working on this.`;
+  return "No orthophoto outputs submitted yet.";
 }
 
 export function JobsPage() {
@@ -43,42 +37,34 @@ export function JobsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
-  async function loadJobs(showSpinner = true) {
-    try {
-      if (showSpinner) {
-        setIsLoading(true);
-      }
-      const results = await fetchJobs();
-      setJobs(results);
-      setError(null);
-    } catch (loadError) {
-      setError(loadError instanceof ApiError ? loadError.message : "Failed to load jobs.");
-    } finally {
-      if (showSpinner) {
-        setIsLoading(false);
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadJobs() {
+      try {
+        const results = await fetchJobs();
+        if (!isMounted) {
+          return;
+        }
+        setJobs(results);
+        setError(null);
+      } catch (loadError) {
+        if (!isMounted) {
+          return;
+        }
+        setError(loadError instanceof ApiError ? loadError.message : "Failed to load jobs.");
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     }
-  }
 
-  useEffect(() => {
     void loadJobs();
+    return () => {
+      isMounted = false;
+    };
   }, []);
-
-  async function handleProtectedAction(jobId: string, action: () => Promise<void>, successMessage: string) {
-    await requireAuth(async () => {
-      try {
-        setActiveJobId(jobId);
-        setMessage(null);
-        await action();
-        await loadJobs(false);
-        setMessage(successMessage);
-      } catch (actionError) {
-        setMessage(actionError instanceof ApiError ? actionError.message : "Action failed.");
-      } finally {
-        setActiveJobId(null);
-      }
-    });
-  }
 
   async function handleDownload(jobId: string) {
     await requireAuth(async () => {
@@ -131,7 +117,7 @@ export function JobsPage() {
             Open Jobs
           </Typography>
           <Typography variant="body1" sx={{ color: "text.secondary", mt: 1 }}>
-            Jobs are published RAW datasets. Anyone can download them, process them offline, and upload an orthophoto later.
+            Jobs are published RAW datasets. Download the archive, process it offline, then upload an orthophoto and link it back to the RAW job.
           </Typography>
         </Box>
 
@@ -160,53 +146,42 @@ export function JobsPage() {
                       </Box>
                       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                         <Chip label="RAW" color="primary" />
-                        <Chip label={`Validation: ${job.validationStatus}`} variant="outlined" />
+                        <Chip label={`Job: ${job.jobStatus}`} variant="outlined" />
                       </Stack>
                     </Stack>
 
-                    <Stack direction={{ xs: "column", md: "row" }} spacing={2} justifyContent="space-between">
-                      <Stack spacing={0.75}>
-                        <Typography variant="body2">
-                          <strong>Uploader:</strong>{" "}
-                          <Box
-                            component="span"
-                            sx={{ cursor: "pointer", textDecoration: "underline" }}
-                            onClick={() => navigate(`/users/${job.uploader.id}`)}
-                          >
-                            {job.uploader.username}
-                          </Box>
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Created:</strong> {formatDate(job.createdAt)}
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                          {formatActivity(job)}
-                        </Typography>
-                      </Stack>
+                    <Stack spacing={0.75}>
+                      <Typography variant="body2">
+                        <strong>Uploader:</strong> {job.uploader.username}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Created:</strong> {formatDate(job.createdAt)}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Participants:</strong> {job.participantsCount}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Outputs:</strong> {job.outputsCount}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                        {jobSummary(job)}
+                      </Typography>
+                    </Stack>
 
-                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-                        <Button
-                          variant="outlined"
-                          onClick={() => void handleProtectedAction(job.id, () => startJob(job.id), "Job marked as active.")}
-                          disabled={isBusy}
-                        >
-                          I&apos;m Working on This
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          onClick={() => void handleProtectedAction(job.id, () => completeJob(job.id), "Job marked as completed.")}
-                          disabled={isBusy}
-                        >
-                          Mark as Completed
-                        </Button>
-                        <Button
-                          variant="contained"
-                          onClick={() => void handleDownload(job.id)}
-                          disabled={isBusy}
-                        >
-                          {isBusy ? <CircularProgress size={18} color="inherit" /> : "Download"}
-                        </Button>
-                      </Stack>
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                      <Button
+                        variant="outlined"
+                        onClick={() => navigate(`/upload?job=${job.id}`)}
+                      >
+                        Upload Linked Orthophoto
+                      </Button>
+                      <Button
+                        variant="contained"
+                        onClick={() => void handleDownload(job.id)}
+                        disabled={isBusy}
+                      >
+                        {isBusy ? <CircularProgress size={18} color="inherit" /> : "Download"}
+                      </Button>
                     </Stack>
                   </Stack>
                 </CardContent>

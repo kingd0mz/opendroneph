@@ -3,16 +3,10 @@ import { Button, Card, CardContent, Chip, Stack, Typography } from "@mui/materia
 import type { Job } from "../../types/dataset";
 
 function activityLabel(job: Job) {
-  if (job.activeUserCount === 0) {
-    return "No active workers yet";
+  if (job.outputsCount === 0) {
+    return "No orthophoto outputs yet";
   }
-
-  const [firstName] = job.activeUsernames;
-  if (job.activeUserCount === 1) {
-    return `${firstName} is working`;
-  }
-
-  return `${firstName} and ${job.activeUserCount - 1} others are working`;
+  return `${job.outputsCount} output${job.outputsCount === 1 ? "" : "s"} from ${job.participantsCount} contributor${job.participantsCount === 1 ? "" : "s"}`;
 }
 
 interface JobCardProps {

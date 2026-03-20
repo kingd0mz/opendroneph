@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { AuthUser, LeaderboardEntry, UserProfile } from "../types/user";
+import type { AuthUser, LeaderboardResponse, UserProfile } from "../types/user";
 
 export async function ensureCsrfCookie(): Promise<void> {
   await api.get("/auth/csrf/");
@@ -31,7 +31,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile> {
   return response.data;
 }
 
-export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
-  const response = await api.get<LeaderboardEntry[]>("/leaderboard/");
+export async function fetchLeaderboard(): Promise<LeaderboardResponse> {
+  const response = await api.get<LeaderboardResponse>("/leaderboard/");
   return response.data;
 }

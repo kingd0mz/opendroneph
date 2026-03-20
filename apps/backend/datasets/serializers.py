@@ -8,8 +8,10 @@ from datasets.models import (
     Dataset,
     DatasetAsset,
     DatasetAssetType,
+    DatasetFlag,
+    DatasetType,
     DownloadEvent,
-    JobActivity,
+    Mission,
 )
 from users.services import user_display_name
 
@@ -68,10 +70,62 @@ class AOISummarySerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class MissionSummarySerializer(serializers.ModelSerializer):
+    aoi = AOISummarySerializer(read_only=True)
+
+    class Meta:
+        model = Mission
+        fields = [
+            "id",
+            "title",
+            "description",
+            "aoi",
+            "event_type",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class MissionSerializer(serializers.ModelSerializer):
+    aoi = AOISummarySerializer(read_only=True)
+    aoi_id = serializers.PrimaryKeyRelatedField(queryset=AOI.objects.all(), source="aoi", write_only=True)
+    created_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Mission
+        fields = [
+            "id",
+            "title",
+            "description",
+            "aoi",
+            "aoi_id",
+            "event_type",
+            "status",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_by", "created_at", "updated_at", "aoi"]
+
+    def get_created_by(self, obj):
+        return {
+            "id": str(obj.created_by_id),
+            "username": user_display_name(obj.created_by),
+            "email": obj.created_by.email,
+        }
+
+    def create(self, validated_data):
+        validated_data["created_by"] = self.context["request"].user
+        return super().create(validated_data)
+
+
 class PublicUploaderSerializer(serializers.Serializer):
     id = serializers.UUIDField(read_only=True)
     username = serializers.SerializerMethodField()
     email = serializers.EmailField(read_only=True)
+    organization_name = serializers.CharField(read_only=True)
 
     def get_username(self, obj):
         return user_display_name(obj)
@@ -104,23 +158,18 @@ class DatasetSummarySerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class JobActivityUserSerializer(serializers.Serializer):
-    id = serializers.UUIDField(read_only=True)
-    username = serializers.SerializerMethodField()
-
-    def get_username(self, obj):
-        return user_display_name(obj)
-
-
-class JobActivitySerializer(serializers.ModelSerializer):
-    user = JobActivityUserSerializer(read_only=True)
+class FlagSummarySerializer(serializers.ModelSerializer):
+    created_by = PublicUploaderSerializer(read_only=True)
+    dataset = DatasetSummarySerializer(read_only=True)
 
     class Meta:
-        model = JobActivity
+        model = DatasetFlag
         fields = [
             "id",
+            "dataset",
+            "reason",
             "status",
-            "user",
+            "created_by",
             "created_at",
             "updated_at",
         ]
@@ -130,9 +179,13 @@ class JobActivitySerializer(serializers.ModelSerializer):
 class JobListDatasetSerializer(serializers.ModelSerializer):
     uploader = PublicUploaderSerializer(read_only=True)
     aoi = AOISummarySerializer(read_only=True)
+    mission = MissionSummarySerializer(read_only=True)
     data_type = serializers.CharField(source="type", read_only=True)
-    active_user_count = serializers.SerializerMethodField()
-    active_usernames = serializers.SerializerMethodField()
+    participants_count = serializers.IntegerField(read_only=True)
+    outputs_count = serializers.IntegerField(read_only=True)
+    participants = serializers.SerializerMethodField()
+    outputs = serializers.SerializerMethodField()
+    job_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Dataset
@@ -142,26 +195,43 @@ class JobListDatasetSerializer(serializers.ModelSerializer):
             "description",
             "uploader",
             "aoi",
+            "mission",
             "data_type",
             "status",
             "validation_status",
             "created_at",
-            "active_user_count",
-            "active_usernames",
+            "participants_count",
+            "outputs_count",
+            "participants",
+            "outputs",
+            "job_status",
         ]
         read_only_fields = fields
 
-    def get_active_user_count(self, obj):
-        active_activities = getattr(obj, "prefetched_active_job_activities", None)
-        if active_activities is not None:
-            return len(active_activities)
-        return obj.job_activities.filter(status="active").count()
+    def get_participants(self, obj):
+        users = getattr(obj, "prefetched_participants", None)
+        if users is None:
+            users = []
+        return [
+            {
+                "id": str(user.id),
+                "username": user_display_name(user),
+                "organization_name": user.organization_name,
+            }
+            for user in users[:5]
+        ]
 
-    def get_active_usernames(self, obj):
-        active_activities = getattr(obj, "prefetched_active_job_activities", None)
-        if active_activities is None:
-            active_activities = obj.job_activities.filter(status="active").select_related("user").order_by("created_at")[:3]
-        return [user_display_name(activity.user) for activity in active_activities[:3]]
+    def get_outputs(self, obj):
+        outputs = getattr(obj, "prefetched_outputs", None)
+        if outputs is None:
+            outputs = obj.outputs.filter(type=DatasetType.ORTHOPHOTO)
+        return DatasetSummarySerializer(outputs[:5], many=True).data
+
+    def get_job_status(self, obj):
+        outputs_count = getattr(obj, "outputs_count", None)
+        if outputs_count is None:
+            outputs_count = obj.outputs.filter(type=DatasetType.ORTHOPHOTO).count()
+        return "completed" if outputs_count >= 1 else "active"
 
 
 class AOISerializer(serializers.ModelSerializer):
@@ -201,14 +271,22 @@ class DatasetSerializer(serializers.ModelSerializer):
         write_only=True,
     )
     aoi = AOISummarySerializer(read_only=True)
-    source_dataset_id = serializers.PrimaryKeyRelatedField(
-        queryset=Dataset.objects.all(),
-        source="source_dataset",
+    job_id = serializers.PrimaryKeyRelatedField(
+        queryset=Dataset.objects.filter(type="raw"),
+        source="job",
         allow_null=True,
         required=False,
         write_only=True,
     )
-    source_dataset = DatasetSummarySerializer(read_only=True)
+    job = DatasetSummarySerializer(read_only=True)
+    mission_id = serializers.PrimaryKeyRelatedField(
+        queryset=Mission.objects.all(),
+        source="mission",
+        allow_null=True,
+        required=False,
+        write_only=True,
+    )
+    mission = MissionSummarySerializer(read_only=True)
 
     class Meta:
         model = Dataset
@@ -219,8 +297,10 @@ class DatasetSerializer(serializers.ModelSerializer):
             "uploader",
             "aoi",
             "aoi_id",
-            "source_dataset",
-            "source_dataset_id",
+            "job",
+            "job_id",
+            "mission",
+            "mission_id",
             "footprint",
             "type",
             "status",
@@ -246,7 +326,26 @@ class DatasetSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "assets",
+            "aoi",
+            "job",
+            "mission",
         ]
+
+    def validate(self, attrs):
+        dataset_type = attrs.get("type")
+        job = attrs.get("job")
+        mission = attrs.get("mission")
+
+        if dataset_type == "raw" and job is not None:
+            raise serializers.ValidationError({"job_id": "RAW datasets cannot link to another job."})
+
+        if dataset_type == "raw" and mission is not None:
+            raise serializers.ValidationError({"mission_id": "RAW datasets cannot link to a mission in Phase 1."})
+
+        if dataset_type == "orthophoto" and job is not None and job.type != "raw":
+            raise serializers.ValidationError({"job_id": "Orthophotos can only link to RAW dataset jobs."})
+
+        return attrs
 
     def create(self, validated_data):
         validated_data["uploader"] = self.context["request"].user
@@ -259,7 +358,9 @@ class DatasetDetailSerializer(serializers.ModelSerializer):
     data_type = serializers.CharField(source="type", read_only=True)
     assets = PublicDatasetAssetSerializer(many=True, read_only=True)
     aoi = AOISummarySerializer(read_only=True)
-    source_dataset = DatasetSummarySerializer(read_only=True)
+    job = DatasetSummarySerializer(read_only=True)
+    mission = MissionSummarySerializer(read_only=True)
+    flags = FlagSummarySerializer(many=True, read_only=True)
 
     class Meta:
         model = Dataset
@@ -269,15 +370,29 @@ class DatasetDetailSerializer(serializers.ModelSerializer):
             "description",
             "uploader",
             "aoi",
-            "source_dataset",
+            "job",
+            "mission",
             "data_type",
             "status",
             "validation_status",
             "created_at",
             "footprint",
             "assets",
+            "flags",
         ]
         read_only_fields = fields
+
+
+class DatasetFlagCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DatasetFlag
+        fields = ["id", "dataset", "reason", "created_by", "status", "created_at", "updated_at"]
+        read_only_fields = ["id", "dataset", "created_by", "status", "created_at", "updated_at"]
+
+    def create(self, validated_data):
+        validated_data["dataset"] = self.context["dataset"]
+        validated_data["created_by"] = self.context["request"].user
+        return super().create(validated_data)
 
 
 class DownloadEventSerializer(serializers.ModelSerializer):

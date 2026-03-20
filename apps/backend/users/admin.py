@@ -10,6 +10,7 @@ class UserAdmin(DjangoUserAdmin):
     list_display = (
         "email",
         "display_username",
+        "organization_name",
         "contribution_count_display",
         "is_email_verified",
         "is_staff",
@@ -22,7 +23,7 @@ class UserAdmin(DjangoUserAdmin):
         (None, {"fields": ("email", "password")}),
         (
             "Profile",
-            {"fields": ("contribution_count_display", "is_email_verified", "created_at", "updated_at")},
+            {"fields": ("organization_name", "contribution_count_display", "is_email_verified", "created_at", "updated_at")},
         ),
         (
             "Permissions",
@@ -35,7 +36,7 @@ class UserAdmin(DjangoUserAdmin):
             None,
             {
                 "classes": ("wide",),
-                "fields": ("email", "password1", "password2", "is_email_verified", "is_staff", "is_superuser"),
+                "fields": ("email", "organization_name", "password1", "password2", "is_email_verified", "is_staff", "is_superuser"),
             },
         ),
     )

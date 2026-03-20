@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Box, Button, Card, CardContent, Chip, Divider, Stack, Typography } from "@mui/material";
 
 import { FullscreenLoadingState, FullscreenState } from "../components/FullscreenState";
-import { AOIList } from "../components/home/AOIList";
 import { ContributionFeed, type ContributionFeedItem } from "../components/home/ContributionFeed";
 import { EventCard, type EventCardData } from "../components/home/EventCard";
 import { HomeLayout } from "../components/home/HomeLayout";
@@ -171,10 +170,6 @@ export function MapPage() {
   }, [isAuthenticated]);
 
   const eventIds = useMemo(() => new Set(activeEvents.map((event) => event.aoi.id)), [activeEvents]);
-  const mappingPriorities = useMemo(() => {
-    const remaining = aois.filter((aoi) => !eventIds.has(aoi.id));
-    return remaining.length > 0 ? remaining : aois;
-  }, [aois, eventIds]);
   const datasetCollection = useMemo(() => toDatasetFeatureCollection(datasets), [datasets]);
   const aoiCollection = useMemo(() => toAoiFeatureCollection(aois, eventIds), [aois, eventIds]);
 
@@ -314,34 +309,6 @@ export function MapPage() {
                 </Stack>
               </CardContent>
             </Card>
-
-            <Card sx={{ borderRadius: 4, bgcolor: "background.paper" }}>
-              <CardContent sx={{ p: 2.1 }}>
-                <Stack spacing={1.4}>
-                  <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                      {SECTION_COPY.mappingPrioritiesTitle}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.4 }}>
-                      {SECTION_COPY.mappingPrioritiesDescription}
-                    </Typography>
-                  </Box>
-                  {mappingPriorities.length === 0 ? (
-                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                      No mapping priorities available yet.
-                    </Typography>
-                  ) : (
-                    <AOIList
-                      aois={mappingPriorities}
-                      focusedAoiId={focusedAoiId}
-                      onFocus={setFocusedAoiId}
-                      onHover={setHoveredAoiId}
-                    />
-                  )}
-                </Stack>
-              </CardContent>
-            </Card>
-
             <Card sx={{ borderRadius: 4, bgcolor: "background.paper" }}>
               <CardContent sx={{ p: 2.1 }}>
                 <Stack spacing={1.3}>

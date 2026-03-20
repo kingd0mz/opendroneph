@@ -3,6 +3,8 @@ from django.contrib import admin
 from datasets.models import (
     Dataset,
     DatasetAsset,
+    DatasetFlag,
+    Mission,
     PHBoundary,
     ValidationRecord,
 )
@@ -32,6 +34,22 @@ class DatasetAssetAdmin(admin.ModelAdmin):
     readonly_fields = ("created_at",)
 
 
+@admin.register(Mission)
+class MissionAdmin(admin.ModelAdmin):
+    list_display = ("title", "event_type", "status", "aoi", "created_by", "created_at")
+    list_filter = ("status", "event_type")
+    search_fields = ("title", "aoi__title", "created_by__email")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(DatasetFlag)
+class DatasetFlagAdmin(admin.ModelAdmin):
+    list_display = ("dataset", "created_by", "status", "created_at")
+    list_filter = ("status",)
+    search_fields = ("dataset__title", "created_by__email", "reason")
+    readonly_fields = ("created_at", "updated_at")
+
+
 @admin.register(ValidationRecord)
 class ValidationRecordAdmin(admin.ModelAdmin):
     list_display = ("dataset", "validation_type", "status", "created_at")
@@ -47,6 +65,7 @@ class ValidationRecordAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
 
 @admin.register(PHBoundary)
 class PHBoundaryAdmin(admin.ModelAdmin):

@@ -190,9 +190,14 @@ export function DatasetDetailPage({ datasetId }: DatasetDetailPageProps) {
                 >
                   <strong>Uploader:</strong> {dataset.uploader.username} ({dataset.uploader.email})
                 </Typography>
-                {dataset.sourceDataset ? (
+                {dataset.job ? (
                   <Typography variant="body2">
-                    <strong>Source RAW Dataset:</strong> {dataset.sourceDataset.title}
+                    <strong>Linked Job:</strong> {dataset.job.title}
+                  </Typography>
+                ) : null}
+                {dataset.mission ? (
+                  <Typography variant="body2">
+                    <strong>Mission:</strong> {dataset.mission.title}
                   </Typography>
                 ) : null}
               </Stack>

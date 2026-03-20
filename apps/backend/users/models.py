@@ -40,6 +40,7 @@ class User(AbstractUser):
     username = None
     email = models.EmailField(unique=True)
     is_email_verified = models.BooleanField(default=False)
+    organization_name = models.CharField(max_length=255, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

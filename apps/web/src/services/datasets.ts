@@ -13,11 +13,11 @@ import type {
   DatasetDetailApiItem,
   DatasetDownloadApiResponse,
   DatasetDownloadResult,
+  DatasetFlag,
   DatasetReference,
   Job,
-  JobActivity,
-  JobActivityApiResponse,
   JobApiItem,
+  MissionSummary,
   UploadDatasetAssetInput,
 } from "../types/dataset";
 
@@ -36,6 +36,23 @@ function normalizeAoiSummary(item: {
     purpose: item.purpose,
     isActive: item.is_active,
     createdAt: item.created_at,
+  };
+}
+
+function normalizeMission(item: JobApiItem["mission"]): MissionSummary | null {
+  if (!item) {
+    return null;
+  }
+
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    aoi: normalizeAoiSummary(item.aoi),
+    eventType: item.event_type,
+    status: item.status,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
   };
 }
 
@@ -85,6 +102,17 @@ function normalizeAsset(
   };
 }
 
+function normalizeFlag(flag: DatasetDetailApiItem["flags"][number]): DatasetFlag {
+  return {
+    id: flag.id,
+    reason: flag.reason,
+    status: flag.status,
+    createdBy: flag.created_by,
+    createdAt: flag.created_at,
+    updatedAt: flag.updated_at,
+  };
+}
+
 function normalizeDatasetDetail(item: DatasetDetailApiItem): DatasetDetail {
   return {
     id: item.id,
@@ -92,13 +120,15 @@ function normalizeDatasetDetail(item: DatasetDetailApiItem): DatasetDetail {
     description: item.description,
     uploader: item.uploader,
     aoi: item.aoi ? normalizeAoiSummary(item.aoi) : null,
-    sourceDataset: item.source_dataset ? normalizeDatasetReference(item.source_dataset) : null,
+    job: item.job ? normalizeDatasetReference(item.job) : null,
+    mission: normalizeMission(item.mission),
     dataType: item.data_type,
     status: item.status,
     validationStatus: item.validation_status,
     createdAt: item.created_at,
     footprint: item.footprint,
     assets: item.assets.map(normalizeAsset),
+    flags: item.flags.map(normalizeFlag),
   };
 }
 
@@ -108,36 +138,26 @@ function normalizeJob(item: JobApiItem): Job {
     title: item.title,
     description: item.description,
     uploader: item.uploader,
+    aoi: item.aoi ? normalizeAoiSummary(item.aoi) : null,
+    mission: normalizeMission(item.mission),
     dataType: item.data_type,
     status: item.status,
     validationStatus: item.validation_status,
     createdAt: item.created_at,
-    activeUserCount: item.active_user_count,
-    activeUsernames: item.active_usernames,
-  };
-}
-
-function normalizeJobActivityEntry(item: JobActivityApiResponse["active_users"][number]) {
-  return {
-    id: item.id,
-    status: item.status,
-    user: item.user,
-    createdAt: item.created_at,
-    updatedAt: item.updated_at,
-  };
-}
-
-function normalizeJobActivity(item: JobActivityApiResponse): JobActivity {
-  return {
-    dataset: item.dataset,
-    activeUsers: item.active_users.map(normalizeJobActivityEntry),
-    completedUsers: item.completed_users.map(normalizeJobActivityEntry),
+    participantsCount: item.participants_count,
+    outputsCount: item.outputs_count,
+    participants: item.participants.map((participant) => ({
+      id: participant.id,
+      username: participant.username,
+      organizationName: participant.organization_name,
+    })),
+    outputs: item.outputs.map(normalizeDatasetReference),
+    jobStatus: item.job_status,
   };
 }
 
 export async function fetchPublishedDatasets(): Promise<Dataset[]> {
   const response = await api.get<DatasetApiItem[]>("/datasets/");
-
   return response.data.map(normalizeDataset);
 }
 
@@ -152,7 +172,8 @@ export async function createDataset(input: CreateDatasetInput): Promise<{ id: st
     description: input.description,
     type: input.type,
     aoi_id: input.aoiId,
-    source_dataset_id: input.sourceDatasetId,
+    job_id: input.jobId,
+    mission_id: input.missionId,
     footprint: input.footprint,
     capture_date: input.captureDate,
     platform_type: "drone",
@@ -198,19 +219,6 @@ export async function downloadDataset(datasetId: string): Promise<DatasetDownloa
 export async function fetchJobs(): Promise<Job[]> {
   const response = await api.get<JobApiItem[]>("/jobs/");
   return response.data.map(normalizeJob);
-}
-
-export async function startJob(datasetId: string): Promise<void> {
-  await api.post(`/jobs/${datasetId}/start/`);
-}
-
-export async function completeJob(datasetId: string): Promise<void> {
-  await api.post(`/jobs/${datasetId}/complete/`);
-}
-
-export async function fetchJobActivity(datasetId: string): Promise<JobActivity> {
-  const response = await api.get<JobActivityApiResponse>(`/jobs/${datasetId}/activity/`);
-  return normalizeJobActivity(response.data);
 }
 
 export async function fetchAois(): Promise<AOI[]> {

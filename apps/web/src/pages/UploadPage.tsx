@@ -61,7 +61,8 @@ export function UploadPage() {
   const [datasetType, setDatasetType] = useState<DatasetType>("raw");
   const [captureDate, setCaptureDate] = useState(todayDate());
   const [aoiId, setAoiId] = useState("");
-  const [sourceDatasetId, setSourceDatasetId] = useState("");
+  const [jobId, setJobId] = useState("");
+  const [missionId, setMissionId] = useState("");
   const [datasetId, setDatasetId] = useState<string | null>(null);
   const [datasetDetail, setDatasetDetail] = useState<DatasetDetail | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -97,9 +98,15 @@ export function UploadPage() {
       }
     }
 
-    const requestedAoiId = new URLSearchParams(window.location.search).get("aoi");
+    const params = new URLSearchParams(window.location.search);
+    const requestedAoiId = params.get("aoi");
+    const requestedJobId = params.get("job");
     if (requestedAoiId) {
       setAoiId(requestedAoiId);
+    }
+    if (requestedJobId) {
+      setDatasetType("orthophoto");
+      setJobId(requestedJobId);
     }
 
     void loadAois();
@@ -138,7 +145,8 @@ export function UploadPage() {
         description: description.trim(),
         type: datasetType,
         aoiId: aoiId.trim() || undefined,
-        sourceDatasetId: datasetType === "orthophoto" && sourceDatasetId.trim() ? sourceDatasetId.trim() : undefined,
+        jobId: datasetType === "orthophoto" && jobId.trim() ? jobId.trim() : undefined,
+        missionId: datasetType === "orthophoto" && missionId.trim() ? missionId.trim() : undefined,
         footprint: PLACEHOLDER_FOOTPRINT,
         captureDate: captureDate || todayDate(),
       });
@@ -307,10 +315,19 @@ export function UploadPage() {
               {datasetType === "orthophoto" ? (
                 <TextField
                   label="Source RAW Dataset ID (optional)"
-                  value={sourceDatasetId}
-                  onChange={(event) => setSourceDatasetId(event.target.value)}
+                  value={jobId}
+                  onChange={(event) => setJobId(event.target.value)}
                   fullWidth
-                  helperText="Optional reference only. Orthophotos can still be created and published without linking."
+                  helperText="Optional RAW dataset job link."
+                />
+              ) : null}
+              {datasetType === "orthophoto" ? (
+                <TextField
+                  label="Mission ID (optional)"
+                  value={missionId}
+                  onChange={(event) => setMissionId(event.target.value)}
+                  fullWidth
+                  helperText="Optional mission link for this orthophoto."
                 />
               ) : null}
               <Alert severity="info">
@@ -393,9 +410,14 @@ export function UploadPage() {
                       <strong>AOI:</strong> {selectedAoi.title}
                     </Typography>
                   ) : null}
-                  {datasetDetail.sourceDataset ? (
+                  {datasetDetail.job ? (
                     <Typography variant="body2">
-                      <strong>Source RAW Dataset:</strong> {datasetDetail.sourceDataset.title} ({datasetDetail.sourceDataset.id})
+                      <strong>Linked Job:</strong> {datasetDetail.job.title} ({datasetDetail.job.id})
+                    </Typography>
+                  ) : null}
+                  {datasetDetail.mission ? (
+                    <Typography variant="body2">
+                      <strong>Mission:</strong> {datasetDetail.mission.title}
                     </Typography>
                   ) : null}
                 </Stack>

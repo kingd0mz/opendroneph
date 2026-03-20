@@ -30,12 +30,9 @@ export const BRAND_COPY = {
 export const SECTION_COPY = {
   activeMissionsTitle: "Active Missions",
   activeMissionsDescription:
-    "Priority areas where current contributions can support disaster response, validation, and national mapping.",
+    "Current mapping priorities where contributions can support disaster response, validation, and national mapping.",
   activeMissionsEmpty:
-    "No active missions right now. Explore mapping priorities below.",
-  mappingPrioritiesTitle: "Mapping Priorities",
-  mappingPrioritiesDescription:
-    "Areas of interest where more drone imagery and outputs can strengthen public mapping resources.",
+    "No active missions right now. Once a moderator creates a mission such as 'Typhoon Domeng' for Tacloban, it will appear here.",
   jobsTitle: "Available Drone Data",
   jobsDescription:
     "Open RAW datasets that anyone can access and process for mapping and analysis.",

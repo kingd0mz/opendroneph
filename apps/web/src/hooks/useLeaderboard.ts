@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 
 import { ApiError } from "../services/api";
 import { fetchLeaderboard } from "../services/users";
-import type { LeaderboardEntry } from "../types/user";
+import type { LeaderboardEntry, OrganizationLeaderboardEntry } from "../types/user";
 
 export function useLeaderboard() {
-  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [userEntries, setUserEntries] = useState<LeaderboardEntry[]>([]);
+  const [organizationEntries, setOrganizationEntries] = useState<OrganizationLeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,7 +20,8 @@ export function useLeaderboard() {
         if (!isMounted) {
           return;
         }
-        setEntries(result);
+        setUserEntries(result.users);
+        setOrganizationEntries(result.organizations);
         setError(null);
       } catch (loadError) {
         if (!isMounted) {
@@ -40,5 +42,5 @@ export function useLeaderboard() {
     };
   }, []);
 
-  return { entries, isLoading, error };
+  return { userEntries, organizationEntries, isLoading, error };
 }

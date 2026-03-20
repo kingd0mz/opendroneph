@@ -1,6 +1,8 @@
 export type DatasetType = "raw" | "orthophoto";
 export type ValidationStatus = "pending" | "valid" | "invalid";
 export type AOIPurpose = "disaster" | "landcover" | "benthic";
+export type MissionStatus = "active" | "closed";
+export type JobStatus = "active" | "completed";
 
 export interface AOISummary {
   id: string;
@@ -21,6 +23,7 @@ export interface DatasetUploader {
   id: string;
   username: string;
   email: string;
+  organization_name: string;
 }
 
 export interface DatasetAssetSummary {
@@ -36,6 +39,26 @@ export interface DatasetReference {
   title: string;
   dataType: DatasetType;
   createdAt: string;
+}
+
+export interface MissionSummary {
+  id: string;
+  title: string;
+  description: string;
+  aoi: AOISummary;
+  eventType: string;
+  status: MissionStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DatasetFlag {
+  id: string;
+  reason: string;
+  status: "pending" | "ignored";
+  createdBy: DatasetUploader;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DatasetApiItem {
@@ -59,11 +82,7 @@ export interface DatasetDetailApiItem {
   id: string;
   title: string;
   description: string;
-  uploader: {
-    id: string;
-    username: string;
-    email: string;
-  };
+  uploader: DatasetUploader;
   aoi: {
     id: string;
     title: string;
@@ -72,11 +91,28 @@ export interface DatasetDetailApiItem {
     is_active: boolean;
     created_at: string;
   } | null;
-  source_dataset: {
+  job: {
     id: string;
     title: string;
     data_type: DatasetType;
     created_at: string;
+  } | null;
+  mission: {
+    id: string;
+    title: string;
+    description: string;
+    event_type: string;
+    status: MissionStatus;
+    created_at: string;
+    updated_at: string;
+    aoi: {
+      id: string;
+      title: string;
+      description: string;
+      purpose: AOIPurpose;
+      is_active: boolean;
+      created_at: string;
+    };
   } | null;
   data_type: DatasetType;
   status: string;
@@ -89,6 +125,14 @@ export interface DatasetDetailApiItem {
     size_bytes: number;
     is_downloadable: boolean;
     created_at: string;
+  }>;
+  flags: Array<{
+    id: string;
+    reason: string;
+    status: "pending" | "ignored";
+    created_by: DatasetUploader;
+    created_at: string;
+    updated_at: string;
   }>;
 }
 
@@ -120,13 +164,15 @@ export interface DatasetDetail {
   description: string;
   uploader: DatasetUploader;
   aoi: AOISummary | null;
-  sourceDataset: DatasetReference | null;
+  job: DatasetReference | null;
+  mission: MissionSummary | null;
   dataType: DatasetType;
   status: string;
   validationStatus: ValidationStatus;
   createdAt: string;
   footprint: GeoJSON.MultiPolygon;
   assets: DatasetAssetSummary[];
+  flags: DatasetFlag[];
 }
 
 export interface DatasetDownloadResult {
@@ -143,7 +189,8 @@ export interface CreateDatasetInput {
   footprint: GeoJSON.MultiPolygon;
   captureDate: string;
   aoiId?: string;
-  sourceDatasetId?: string;
+  jobId?: string;
+  missionId?: string;
 }
 
 export interface UploadDatasetAssetInput {
@@ -158,12 +205,26 @@ export interface JobApiItem {
   title: string;
   description: string;
   uploader: DatasetUploader;
+  aoi: DatasetDetailApiItem["aoi"];
+  mission: DatasetDetailApiItem["mission"];
   data_type: DatasetType;
   status: string;
   validation_status: ValidationStatus;
   created_at: string;
-  active_user_count: number;
-  active_usernames: string[];
+  participants_count: number;
+  outputs_count: number;
+  participants: Array<{
+    id: string;
+    username: string;
+    organization_name: string;
+  }>;
+  outputs: Array<{
+    id: string;
+    title: string;
+    data_type: DatasetType;
+    created_at: string;
+  }>;
+  job_status: JobStatus;
 }
 
 export interface Job {
@@ -171,52 +232,21 @@ export interface Job {
   title: string;
   description: string;
   uploader: DatasetUploader;
+  aoi: AOISummary | null;
+  mission: MissionSummary | null;
   dataType: DatasetType;
   status: string;
   validationStatus: ValidationStatus;
   createdAt: string;
-  activeUserCount: number;
-  activeUsernames: string[];
-}
-
-export interface JobActivityEntryApiItem {
-  id: string;
-  status: "active" | "completed";
-  user: {
+  participantsCount: number;
+  outputsCount: number;
+  participants: Array<{
     id: string;
     username: string;
-  };
-  created_at: string;
-  updated_at: string;
-}
-
-export interface JobActivityApiResponse {
-  dataset: {
-    id: string;
-    title: string;
-  };
-  active_users: JobActivityEntryApiItem[];
-  completed_users: JobActivityEntryApiItem[];
-}
-
-export interface JobActivityEntry {
-  id: string;
-  status: "active" | "completed";
-  user: {
-    id: string;
-    username: string;
-  };
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface JobActivity {
-  dataset: {
-    id: string;
-    title: string;
-  };
-  activeUsers: JobActivityEntry[];
-  completedUsers: JobActivityEntry[];
+    organizationName: string;
+  }>;
+  outputs: DatasetReference[];
+  jobStatus: JobStatus;
 }
 
 export interface AOIApiItem {

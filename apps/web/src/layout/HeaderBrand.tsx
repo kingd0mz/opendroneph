@@ -39,7 +39,7 @@ export function HeaderBrand() {
 
       <Box>
         <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.72)", display: "block", lineHeight: 1.1 }}>
-          PhilSA
+          Philippine Space Agency
         </Typography>
         <Typography variant="h6" component="div" sx={{ color: "common.white", fontWeight: 800, lineHeight: 1.05 }}>
           {BRAND_COPY.platformTitle}

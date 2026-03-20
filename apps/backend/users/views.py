@@ -1,16 +1,22 @@
 from django.contrib.auth import login, logout
-from django.db.models import Prefetch
+from django.db.models import Count, IntegerField, Prefetch, Q, Value
+from django.db.models.functions import Coalesce, NullIf
+from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from datasets.models import Dataset, DatasetStatus, DatasetType, JobActivity, JobActivityStatus, ValidationStatus
+from datasets.models import Dataset, DatasetStatus, DatasetType, ValidationStatus
 from users.models import User
-from users.serializers import LeaderboardEntrySerializer, LoginSerializer, UserProfileSerializer
+from users.serializers import (
+    LeaderboardEntrySerializer,
+    LoginSerializer,
+    OrganizationLeaderboardEntrySerializer,
+    UserProfileSerializer,
+)
 
 
 def _user_payload(user):
@@ -20,6 +26,7 @@ def _user_payload(user):
         "is_email_verified": user.is_email_verified,
         "is_staff": user.is_staff,
         "is_superuser": user.is_superuser,
+        "organization_name": user.organization_name,
     }
 
 
@@ -34,13 +41,16 @@ def _profile_queryset():
             to_attr="public_contributions",
         ),
         Prefetch(
-            "job_activities",
-            queryset=JobActivity.objects.filter(
-                status=JobActivityStatus.COMPLETED,
-                dataset__type=DatasetType.RAW,
-                dataset__status=DatasetStatus.PUBLISHED,
-            ).select_related("dataset").order_by("-updated_at"),
-            to_attr="public_completed_jobs",
+            "uploaded_datasets",
+            queryset=Dataset.objects.filter(
+                type=DatasetType.ORTHOPHOTO,
+                status=DatasetStatus.PUBLISHED,
+                validation_status=ValidationStatus.VALID,
+                job__isnull=False,
+            )
+            .select_related("job")
+            .order_by("-created_at"),
+            to_attr="public_completed_job_outputs",
         ),
     )
 
@@ -102,6 +112,69 @@ class LeaderboardView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        leaderboard = User.objects.with_contributions().order_by("-contribution_count", "email")[:50]
-        serializer = LeaderboardEntrySerializer(leaderboard, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        users = User.objects.with_contributions().order_by("-contribution_count", "-jobs_completed_count", "email")[:50]
+        published_valid = Q(
+            uploaded_datasets__status=DatasetStatus.PUBLISHED,
+            uploaded_datasets__validation_status=ValidationStatus.VALID,
+        )
+        organizations = (
+            User.objects.annotate(organization_bucket=Coalesce(NullIf("organization_name", Value("")), Value("Independent")))
+            .values("organization_bucket")
+            .annotate(
+                raw_uploads_count=Coalesce(
+                    Count(
+                        "uploaded_datasets",
+                        filter=published_valid & Q(uploaded_datasets__type=DatasetType.RAW),
+                        distinct=True,
+                    ),
+                    Value(0),
+                    output_field=IntegerField(),
+                ),
+                ortho_uploads_count=Coalesce(
+                    Count(
+                        "uploaded_datasets",
+                        filter=published_valid & Q(uploaded_datasets__type=DatasetType.ORTHOPHOTO),
+                        distinct=True,
+                    ),
+                    Value(0),
+                    output_field=IntegerField(),
+                ),
+                jobs_completed_count=Coalesce(
+                    Count(
+                        "uploaded_datasets__job",
+                        filter=published_valid
+                        & Q(uploaded_datasets__type=DatasetType.ORTHOPHOTO)
+                        & Q(uploaded_datasets__job__isnull=False)
+                        & Q(uploaded_datasets__job__type=DatasetType.RAW)
+                        & Q(uploaded_datasets__job__status=DatasetStatus.PUBLISHED)
+                        & Q(uploaded_datasets__job__validation_status=ValidationStatus.VALID),
+                        distinct=True,
+                    ),
+                    Value(0),
+                    output_field=IntegerField(),
+                ),
+                contribution_count=Coalesce(
+                    Count("uploaded_datasets", filter=published_valid, distinct=True),
+                    Value(0),
+                    output_field=IntegerField(),
+                ),
+            )
+            .order_by("-contribution_count", "-jobs_completed_count", "organization_bucket")[:50]
+        )
+        organization_payload = [
+            {
+                "organization_name": row["organization_bucket"],
+                "raw_uploads_count": row["raw_uploads_count"],
+                "ortho_uploads_count": row["ortho_uploads_count"],
+                "jobs_completed_count": row["jobs_completed_count"],
+                "contribution_count": row["contribution_count"],
+            }
+            for row in organizations
+        ]
+        return Response(
+            {
+                "users": LeaderboardEntrySerializer(users, many=True).data,
+                "organizations": OrganizationLeaderboardEntrySerializer(organization_payload, many=True).data,
+            },
+            status=status.HTTP_200_OK,
+        )

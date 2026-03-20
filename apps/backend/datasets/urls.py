@@ -1,16 +1,24 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from datasets.views import AOIDatasetsView, AOIListView, DatasetViewSet, JobActivityView, JobCompleteView, JobListView, JobStartView
+from datasets.views import (
+    AOIDatasetsView,
+    AOIListView,
+    DatasetFlagIgnoreView,
+    DatasetViewSet,
+    FlaggedDatasetListView,
+    JobListView,
+    MissionViewSet,
+)
 
 router = DefaultRouter()
 router.register("datasets", DatasetViewSet, basename="dataset")
+router.register("missions", MissionViewSet, basename="mission")
 
 urlpatterns = [
     path("aois/", AOIListView.as_view(), name="aoi-list"),
     path("aois/<uuid:aoi_id>/datasets/", AOIDatasetsView.as_view(), name="aoi-datasets"),
     path("jobs/", JobListView.as_view(), name="job-list"),
-    path("jobs/<uuid:dataset_id>/start/", JobStartView.as_view(), name="job-start"),
-    path("jobs/<uuid:dataset_id>/complete/", JobCompleteView.as_view(), name="job-complete"),
-    path("jobs/<uuid:dataset_id>/activity/", JobActivityView.as_view(), name="job-activity"),
+    path("flags/", FlaggedDatasetListView.as_view(), name="flag-list"),
+    path("flags/<uuid:flag_id>/ignore/", DatasetFlagIgnoreView.as_view(), name="flag-ignore"),
 ] + router.urls
