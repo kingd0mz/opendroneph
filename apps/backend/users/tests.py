@@ -211,8 +211,8 @@ def test_leaderboard_returns_user_and_organization_stats(footprint):
         user=independent_user,
         footprint=footprint,
         dataset_type=DatasetType.RAW,
-        status_value=DatasetStatus.DRAFT,
-        validation_status=ValidationStatus.PENDING,
+        status_value=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
     )
 
     response = APIClient().get(reverse("leaderboard"))
@@ -222,7 +222,8 @@ def test_leaderboard_returns_user_and_organization_stats(footprint):
     assert response.json()["users"][0]["jobs_completed_count"] == 1
     assert response.json()["users"][0]["contribution_count"] == 3
     assert response.json()["users"][0]["points"] == 3
-    assert response.json()["organizations"][0]["organization_name"] == "PhilSA"
+    assert any(entry["user_id"] == str(independent_user.id) and entry["organization_name"] == "" for entry in response.json()["users"])
+    assert [entry["organization_name"] for entry in response.json()["organizations"]] == ["PhilSA"]
     assert response.json()["organizations"][0]["contribution_count"] == 4
     assert response.json()["organizations"][0]["points"] == 4
 

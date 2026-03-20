@@ -1,6 +1,6 @@
 from django.contrib.auth import login, logout
 from django.db.models import Count, F, IntegerField, Prefetch, Q, Value
-from django.db.models.functions import Coalesce, NullIf
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -118,8 +118,8 @@ class LeaderboardView(APIView):
             uploaded_datasets__validation_status=ValidationStatus.VALID,
         )
         organizations = (
-            User.objects.annotate(organization_bucket=Coalesce(NullIf("organization_name", Value("")), Value("Independent")))
-            .values("organization_bucket")
+            User.objects.exclude(organization_name="")
+            .values("organization_name")
             .annotate(
                 raw_uploads_count=Coalesce(
                     Count(
@@ -155,11 +155,11 @@ class LeaderboardView(APIView):
                 ),
             )
             .annotate(contribution_count=F("raw_uploads_count") + F("ortho_uploads_count") + F("jobs_completed_count"))
-            .order_by("-contribution_count", "-jobs_completed_count", "organization_bucket")[:50]
+            .order_by("-contribution_count", "-jobs_completed_count", "organization_name")[:50]
         )
         organization_payload = [
             {
-                "organization_name": row["organization_bucket"],
+                "organization_name": row["organization_name"],
                 "raw_uploads_count": row["raw_uploads_count"],
                 "ortho_uploads_count": row["ortho_uploads_count"],
                 "jobs_completed_count": row["jobs_completed_count"],
