@@ -1,5 +1,5 @@
 from django.contrib.auth import login, logout
-from django.db.models import Count, IntegerField, Prefetch, Q, Value
+from django.db.models import Count, F, IntegerField, Prefetch, Q, Value
 from django.db.models.functions import Coalesce, NullIf
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -153,12 +153,8 @@ class LeaderboardView(APIView):
                     Value(0),
                     output_field=IntegerField(),
                 ),
-                contribution_count=Coalesce(
-                    Count("uploaded_datasets", filter=published_valid, distinct=True),
-                    Value(0),
-                    output_field=IntegerField(),
-                ),
             )
+            .annotate(contribution_count=F("raw_uploads_count") + F("ortho_uploads_count") + F("jobs_completed_count"))
             .order_by("-contribution_count", "-jobs_completed_count", "organization_bucket")[:50]
         )
         organization_payload = [

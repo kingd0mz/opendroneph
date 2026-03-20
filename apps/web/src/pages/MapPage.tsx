@@ -19,6 +19,7 @@ import {
   fetchAois,
   fetchDatasetDetail,
   fetchJobs,
+  fetchMissions,
   fetchPublishedDatasets,
 } from "../services/datasets";
 import { fetchMyProfile } from "../services/users";
@@ -78,7 +79,7 @@ function eventStatus(aoi: AOI): EventCardData["status"] {
 
 export function MapPage() {
   const { isAuthenticated, requireAuth } = useAuth();
-  const [aois, setAois] = useState<AOI[]>([]);
+  const [missionAois, setMissionAois] = useState<AOI[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -97,15 +98,19 @@ export function MapPage() {
     async function loadHomepage() {
       try {
         setIsLoading(true);
-        const [aoisResult, jobsResult, datasetsResult, profileResult] = await Promise.all([
+        const [aoisResult, missionsResult, jobsResult, datasetsResult, profileResult] = await Promise.all([
           fetchAois(),
+          fetchMissions(),
           fetchJobs(),
           fetchPublishedDatasets(),
           isAuthenticated ? fetchMyProfile().catch(() => null) : Promise.resolve(null),
         ]);
 
-        const activeAois = aoisResult
-          .filter((aoi) => aoi.isActive)
+        const aoiById = new Map(aoisResult.map((aoi) => [aoi.id, aoi]));
+        const activeMissions = missionsResult
+          .filter((mission) => mission.status === "active")
+          .map((mission) => aoiById.get(mission.aoi.id))
+          .filter((aoi): aoi is AOI => Boolean(aoi))
           .sort((left, right) => eventPriority(left) - eventPriority(right))
           .slice(0, 3);
 
@@ -123,7 +128,7 @@ export function MapPage() {
             }),
           ),
           Promise.all(
-            activeAois.map(async (aoi) => {
+            activeMissions.map(async (aoi) => {
               const detail = await fetchAoiDatasets(aoi.id);
               const contributors = new Set(
                 [...detail.rawDatasets, ...detail.orthophotos].map((dataset) => dataset.uploader.id),
@@ -142,13 +147,13 @@ export function MapPage() {
           return;
         }
 
-        setAois(aoisResult.filter((aoi) => aoi.isActive));
+        setMissionAois(activeMissions);
         setJobs(jobsResult.slice(0, 4));
         setDatasets(datasetsResult.filter((dataset) => dataset.dataType === "orthophoto"));
         setProfile(profileResult);
         setContributionFeed(feedDetails);
         setActiveEvents(eventDetails);
-        setFocusedAoiId(eventDetails[0]?.aoi.id ?? activeAois[0]?.id ?? null);
+        setFocusedAoiId(eventDetails[0]?.aoi.id ?? activeMissions[0]?.id ?? null);
         setError(null);
       } catch (loadError) {
         if (!isMounted) {
@@ -169,9 +174,11 @@ export function MapPage() {
     };
   }, [isAuthenticated]);
 
-  const eventIds = useMemo(() => new Set(activeEvents.map((event) => event.aoi.id)), [activeEvents]);
   const datasetCollection = useMemo(() => toDatasetFeatureCollection(datasets), [datasets]);
-  const aoiCollection = useMemo(() => toAoiFeatureCollection(aois, eventIds), [aois, eventIds]);
+  const aoiCollection = useMemo(
+    () => toAoiFeatureCollection(missionAois, new Set(missionAois.map((aoi) => aoi.id))),
+    [missionAois],
+  );
 
   async function handleJobDownload(datasetId: string) {
     await requireAuth(async () => {

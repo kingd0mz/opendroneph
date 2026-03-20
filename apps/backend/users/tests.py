@@ -120,6 +120,8 @@ def test_user_profile_returns_phase1_stats(footprint):
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["organization_name"] == "Map Action"
+    assert response.json()["contribution_count"] == 3
+    assert response.json()["points"] == 3
     assert response.json()["stats"] == {
         "raw_uploads_count": 1,
         "ortho_uploads_count": 1,
@@ -153,7 +155,7 @@ def test_with_contributions_queryset_annotation_is_reusable(footprint):
     assert annotated_user.raw_uploads_count == 1
     assert annotated_user.ortho_uploads_count == 1
     assert annotated_user.jobs_completed_count == 1
-    assert annotated_user.contribution_count == 2
+    assert annotated_user.contribution_count == 3
 
 
 @pytest.mark.django_db
@@ -218,5 +220,25 @@ def test_leaderboard_returns_user_and_organization_stats(footprint):
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["users"][0]["user_id"] == str(top_user.id)
     assert response.json()["users"][0]["jobs_completed_count"] == 1
+    assert response.json()["users"][0]["contribution_count"] == 3
+    assert response.json()["users"][0]["points"] == 3
     assert response.json()["organizations"][0]["organization_name"] == "PhilSA"
-    assert response.json()["organizations"][0]["contribution_count"] == 3
+    assert response.json()["organizations"][0]["contribution_count"] == 4
+    assert response.json()["organizations"][0]["points"] == 4
+
+
+@pytest.mark.django_db
+def test_leaderboard_is_public(footprint):
+    user = User.objects.create_user(email="publicleader@example.com", password="testpass123", organization_name="PhilSA")
+    _create_dataset(
+        user=user,
+        footprint=footprint,
+        dataset_type=DatasetType.RAW,
+        status_value=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+    )
+
+    response = APIClient().get(reverse("leaderboard"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["users"][0]["user_id"] == str(user.id)

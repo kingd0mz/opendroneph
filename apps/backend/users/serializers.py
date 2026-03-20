@@ -71,6 +71,7 @@ class UserProfileSerializer(serializers.Serializer):
     username = serializers.SerializerMethodField()
     organization_name = serializers.CharField(read_only=True)
     contribution_count = serializers.IntegerField(read_only=True)
+    points = serializers.IntegerField(source="contribution_count", read_only=True)
     dataset_count = serializers.SerializerMethodField()
     stats = UserStatsSerializer(source="*", read_only=True)
     contributions = serializers.SerializerMethodField()
@@ -144,6 +145,7 @@ class LeaderboardEntrySerializer(serializers.Serializer):
     ortho_uploads_count = serializers.IntegerField(read_only=True)
     jobs_completed_count = serializers.IntegerField(read_only=True)
     contribution_count = serializers.IntegerField(read_only=True)
+    points = serializers.IntegerField(source="contribution_count", read_only=True)
 
     def get_username(self, obj):
         return user_display_name(obj)
@@ -155,3 +157,4 @@ class OrganizationLeaderboardEntrySerializer(serializers.Serializer):
     ortho_uploads_count = serializers.IntegerField(read_only=True)
     jobs_completed_count = serializers.IntegerField(read_only=True)
     contribution_count = serializers.IntegerField(read_only=True)
+    points = serializers.IntegerField(source="contribution_count", read_only=True)

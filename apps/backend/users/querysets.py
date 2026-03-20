@@ -1,5 +1,5 @@
 from django.db import models
-from django.db.models import Count, IntegerField, Q, Value
+from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Coalesce
 
 from datasets.models import DatasetStatus, DatasetType, ValidationStatus
@@ -39,9 +39,6 @@ class UserQuerySet(models.QuerySet):
                 Value(0),
                 output_field=IntegerField(),
             ),
-            contribution_count=Coalesce(
-                Count("uploaded_datasets", filter=published_valid, distinct=True),
-                Value(0),
-                output_field=IntegerField(),
-            ),
+        ).annotate(
+            contribution_count=F("raw_uploads_count") + F("ortho_uploads_count") + F("jobs_completed_count"),
         )

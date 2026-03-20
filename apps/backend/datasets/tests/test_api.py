@@ -228,7 +228,31 @@ def test_create_orthophoto_accepts_optional_job_and_mission_links(api_client, up
 
 
 @pytest.mark.django_db
-def test_create_raw_dataset_rejects_job_and_mission_links(api_client, uploader, moderator, inside_ph_footprint):
+def test_create_standalone_orthophoto_without_job_is_allowed(api_client, uploader, inside_ph_footprint):
+    api_client.force_login(uploader)
+
+    response = api_client.post(
+        reverse("dataset-list"),
+        {
+            "title": "Standalone ortho",
+            "description": "Not tied to a RAW job",
+            "type": DatasetType.ORTHOPHOTO,
+            "footprint": json.loads(inside_ph_footprint.geojson),
+            "capture_date": "2026-01-01",
+            "platform_type": PlatformType.DRONE,
+            "camera_model": "Camera",
+            "license_type": LicenseType.CC_BY,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["job"] is None
+    assert response.json()["mission"] is None
+
+
+@pytest.mark.django_db
+def test_create_raw_dataset_accepts_mission_link_but_rejects_job_link(api_client, uploader, moderator, inside_ph_footprint):
     aoi = _make_aoi(geometry=inside_ph_footprint)
     mission = Mission.objects.create(
         title="Mission",
@@ -241,7 +265,7 @@ def test_create_raw_dataset_rejects_job_and_mission_links(api_client, uploader, 
     raw_job = _make_dataset(owner=uploader, footprint=inside_ph_footprint, dataset_type=DatasetType.RAW)
     api_client.force_login(uploader)
 
-    response = api_client.post(
+    invalid_response = api_client.post(
         reverse("dataset-list"),
         {
             "title": "Invalid raw",
@@ -258,8 +282,26 @@ def test_create_raw_dataset_rejects_job_and_mission_links(api_client, uploader, 
         format="json",
     )
 
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert "job_id" in response.json()
+    valid_response = api_client.post(
+        reverse("dataset-list"),
+        {
+            "title": "Mission-linked raw",
+            "description": "",
+            "type": DatasetType.RAW,
+            "mission_id": str(mission.id),
+            "footprint": json.loads(inside_ph_footprint.geojson),
+            "capture_date": "2026-01-01",
+            "platform_type": PlatformType.DRONE,
+            "camera_model": "Camera",
+            "license_type": LicenseType.CC_BY,
+        },
+        format="json",
+    )
+
+    assert invalid_response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "job_id" in invalid_response.json()
+    assert valid_response.status_code == status.HTTP_201_CREATED
+    assert valid_response.json()["mission"]["id"] == str(mission.id)
 
 
 @pytest.mark.django_db
@@ -282,6 +324,92 @@ def test_jobs_list_derives_participants_outputs_and_completed_status(api_client,
     assert payload[0]["outputs_count"] == 1
     assert payload[0]["job_status"] == "completed"
     assert payload[0]["participants"][0]["username"] == "worker"
+
+
+@pytest.mark.django_db
+def test_jobs_list_supports_multiple_participants_on_the_same_job(api_client, uploader, worker, moderator, inside_ph_footprint):
+    second_worker = User.objects.create_user(
+        email="second-worker@example.com",
+        password="testpass123",
+        is_email_verified=True,
+        organization_name="PhilSA",
+    )
+    raw_job = _make_dataset(owner=uploader, footprint=inside_ph_footprint, dataset_type=DatasetType.RAW, title="Shared RAW job")
+    _make_dataset(
+        owner=worker,
+        footprint=inside_ph_footprint,
+        dataset_type=DatasetType.ORTHOPHOTO,
+        job=raw_job,
+        title="Output 1",
+    )
+    _make_dataset(
+        owner=second_worker,
+        footprint=inside_ph_footprint,
+        dataset_type=DatasetType.ORTHOPHOTO,
+        job=raw_job,
+        title="Output 2",
+    )
+    _make_dataset(
+        owner=worker,
+        footprint=inside_ph_footprint,
+        dataset_type=DatasetType.ORTHOPHOTO,
+        job=raw_job,
+        title="Output 3",
+    )
+
+    response = api_client.get(reverse("job-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()[0]["id"] == str(raw_job.id)
+    assert response.json()[0]["participants_count"] == 2
+    assert response.json()[0]["outputs_count"] == 3
+    assert response.json()[0]["job_status"] != "active"
+
+
+@pytest.mark.django_db
+def test_public_can_view_datasets_but_anonymous_users_cannot_create_or_download(api_client, uploader, inside_ph_footprint, monkeypatch):
+    dataset = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        dataset_type=DatasetType.RAW,
+        status=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+    )
+    DatasetAsset.objects.create(
+        dataset=dataset,
+        asset_type=DatasetAssetType.RAW_ARCHIVE,
+        object_key="datasets/raw.zip",
+        content_type="application/zip",
+        size_bytes=100,
+        checksum_sha256="a" * 64,
+        is_downloadable=True,
+        is_renderable_rgb=False,
+    )
+    monkeypatch.setattr("datasets.views.generate_dataset_asset_download_url", lambda **kwargs: "http://example.com/raw.zip")
+
+    list_response = api_client.get(reverse("dataset-list"))
+    detail_response = api_client.get(reverse("dataset-detail", args=[dataset.id]))
+    create_response = api_client.post(
+        reverse("dataset-list"),
+        {
+            "title": "Anonymous dataset",
+            "description": "Should not be allowed",
+            "type": DatasetType.ORTHOPHOTO,
+            "footprint": json.loads(inside_ph_footprint.geojson),
+            "capture_date": "2026-01-01",
+            "platform_type": PlatformType.DRONE,
+            "camera_model": "Camera",
+            "license_type": LicenseType.CC_BY,
+        },
+        format="json",
+    )
+    download_response = api_client.get(reverse("dataset-download", args=[dataset.id]))
+
+    assert list_response.status_code == status.HTTP_200_OK
+    assert detail_response.status_code == status.HTTP_200_OK
+    assert detail_response.json()["id"] == str(dataset.id)
+    assert create_response.status_code == status.HTTP_403_FORBIDDEN
+    assert download_response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.django_db
@@ -353,6 +481,28 @@ def test_upload_raw_archive_requires_zip_file(api_client, uploader, inside_ph_fo
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.json()["detail"] == "RAW uploads must be .zip files."
     assert DatasetAsset.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_upload_asset_requires_authenticated_user(api_client, uploader, inside_ph_footprint):
+    dataset = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        dataset_type=DatasetType.RAW,
+        status=DatasetStatus.DRAFT,
+        validation_status=ValidationStatus.PENDING,
+    )
+
+    response = api_client.post(
+        reverse("dataset-upload-asset", args=[dataset.id]),
+        {
+            "asset_type": DatasetAssetType.RAW_ARCHIVE,
+            "file": SimpleUploadedFile("raw.zip", b"zip-bytes", content_type="application/zip"),
+        },
+        format="multipart",
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.django_db
@@ -430,9 +580,61 @@ def test_upload_valid_orthophoto_keeps_linked_job_in_detail(api_client, uploader
 
 
 @pytest.mark.django_db
+def test_multiple_jobs_and_outputs_can_link_to_the_same_mission(api_client, uploader, worker, moderator, inside_ph_footprint):
+    aoi = _make_aoi(geometry=inside_ph_footprint, title="Mission AOI")
+    mission = Mission.objects.create(
+        title="Tacloban response",
+        description="Mission description",
+        aoi=aoi,
+        event_type="typhoon",
+        status=MissionStatus.ACTIVE,
+        created_by=moderator,
+    )
+    raw_job_one = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        dataset_type=DatasetType.RAW,
+        mission=mission,
+        title="RAW job 1",
+    )
+    raw_job_two = _make_dataset(
+        owner=worker,
+        footprint=inside_ph_footprint,
+        dataset_type=DatasetType.RAW,
+        mission=mission,
+        title="RAW job 2",
+    )
+    ortho_one = _make_dataset(
+        owner=uploader,
+        footprint=inside_ph_footprint,
+        dataset_type=DatasetType.ORTHOPHOTO,
+        mission=mission,
+        job=raw_job_one,
+        title="Ortho 1",
+    )
+    ortho_two = _make_dataset(
+        owner=worker,
+        footprint=inside_ph_footprint,
+        dataset_type=DatasetType.ORTHOPHOTO,
+        mission=mission,
+        job=raw_job_two,
+        title="Ortho 2",
+    )
+
+    assert Mission.objects.get(pk=mission.id).datasets.count() == 4
+    assert {str(dataset.id) for dataset in mission.datasets.all()} == {
+        str(raw_job_one.id),
+        str(raw_job_two.id),
+        str(ortho_one.id),
+        str(ortho_two.id),
+    }
+
+
+@pytest.mark.django_db
 def test_grid_aggregations_return_low_zoom_cells(api_client, uploader, inside_ph_footprint):
     _make_dataset(owner=uploader, footprint=inside_ph_footprint, dataset_type=DatasetType.RAW, title="RAW job")
     _make_dataset(owner=uploader, footprint=inside_ph_footprint, dataset_type=DatasetType.ORTHOPHOTO, title="Ortho")
+    _make_dataset(owner=uploader, footprint=inside_ph_footprint, dataset_type=DatasetType.ORTHOPHOTO, title="Ortho 2")
 
     response = api_client.get(
         reverse("grid-aggregations"),
@@ -464,3 +666,35 @@ def test_grid_aggregations_return_empty_feature_collection_at_high_zoom(api_clie
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["zoom_band"] == "high"
     assert response.json()["grid_cells"]["features"] == []
+
+
+@pytest.mark.django_db
+def test_grid_aggregations_exclude_raw_jobs_from_counts(api_client, uploader, worker, inside_ph_footprint):
+    raw_job = _make_dataset(owner=uploader, footprint=inside_ph_footprint, dataset_type=DatasetType.RAW, title="RAW job")
+    _make_dataset(owner=worker, footprint=inside_ph_footprint, dataset_type=DatasetType.RAW, title="RAW job 2")
+    _make_dataset(owner=worker, footprint=inside_ph_footprint, dataset_type=DatasetType.ORTHOPHOTO, job=raw_job, title="Visible ortho")
+
+    response = api_client.get(
+        reverse("grid-aggregations"),
+        {
+            "zoom": "8",
+            "bbox": "120,14,122,15",
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    features = response.json()["grid_cells"]["features"]
+    assert len(features) == 1
+    assert features[0]["properties"]["count"] == 1
+
+
+@pytest.mark.django_db
+def test_jobs_endpoint_keeps_raw_datasets_available_as_jobs(api_client, uploader, inside_ph_footprint):
+    raw_job = _make_dataset(owner=uploader, footprint=inside_ph_footprint, dataset_type=DatasetType.RAW, title="RAW job")
+    _make_dataset(owner=uploader, footprint=inside_ph_footprint, dataset_type=DatasetType.ORTHOPHOTO, job=raw_job, title="Ortho")
+
+    response = api_client.get(reverse("job-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()[0]["id"] == str(raw_job.id)
+    assert response.json()[0]["data_type"] == DatasetType.RAW

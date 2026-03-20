@@ -18,6 +18,7 @@ import type {
   GridAggregationResponse,
   Job,
   JobApiItem,
+  MissionApiItem,
   MissionSummary,
   UploadDatasetAssetInput,
 } from "../types/dataset";
@@ -40,7 +41,7 @@ function normalizeAoiSummary(item: {
   };
 }
 
-function normalizeMission(item: JobApiItem["mission"]): MissionSummary | null {
+function normalizeMission(item: JobApiItem["mission"] | MissionApiItem | null): MissionSummary | null {
   if (!item) {
     return null;
   }
@@ -244,4 +245,9 @@ export async function fetchGridAggregations(zoom: number, bbox: [number, number,
     },
   });
   return response.data;
+}
+
+export async function fetchMissions(): Promise<MissionSummary[]> {
+  const response = await api.get<MissionApiItem[]>("/missions/");
+  return response.data.map((item) => normalizeMission(item)).filter((item): item is MissionSummary => item !== null);
 }

@@ -197,6 +197,7 @@ def _grid_aggregation_feature_collection(*, bbox: tuple[float, float, float, flo
             FROM {dataset_table}
             WHERE status = %s
               AND validation_status = %s
+              AND type = %s
               AND ST_Intersects(footprint, ST_MakeEnvelope(%s, %s, %s, %s, 4326))
         ),
         bucketed AS (
@@ -219,6 +220,7 @@ def _grid_aggregation_feature_collection(*, bbox: tuple[float, float, float, flo
     params = [
         DatasetStatus.PUBLISHED,
         ValidationStatus.VALID,
+        DatasetType.ORTHOPHOTO,
         west,
         south,
         east,

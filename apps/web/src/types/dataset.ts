@@ -52,6 +52,24 @@ export interface MissionSummary {
   updatedAt: string;
 }
 
+export interface MissionApiItem {
+  id: string;
+  title: string;
+  description: string;
+  aoi: {
+    id: string;
+    title: string;
+    description: string;
+    purpose: AOIPurpose;
+    is_active: boolean;
+    created_at: string;
+  };
+  event_type: string;
+  status: MissionStatus;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DatasetFlag {
   id: string;
   reason: string;

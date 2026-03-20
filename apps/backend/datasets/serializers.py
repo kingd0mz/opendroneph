@@ -334,13 +334,9 @@ class DatasetSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         dataset_type = attrs.get("type")
         job = attrs.get("job")
-        mission = attrs.get("mission")
 
         if dataset_type == "raw" and job is not None:
             raise serializers.ValidationError({"job_id": "RAW datasets cannot link to another job."})
-
-        if dataset_type == "raw" and mission is not None:
-            raise serializers.ValidationError({"mission_id": "RAW datasets cannot link to a mission in Phase 1."})
 
         if dataset_type == "orthophoto" and job is not None and job.type != "raw":
             raise serializers.ValidationError({"job_id": "Orthophotos can only link to RAW dataset jobs."})
