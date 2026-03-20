@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { Box, FormControl, InputLabel, MenuItem, Select } from "@mui/material";
+import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -21,12 +22,64 @@ const AOI_GLOW_LAYER_ID = "aois-glow";
 const AOI_FILL_LAYER_ID = "aois-fill";
 const AOI_STROKE_LAYER_ID = "aois-stroke";
 const HIGH_ZOOM_THRESHOLD = 11;
+const BASEMAP_LAYER_PREFIX = "basemap-layer-";
+
+type BasemapId =
+  | "basemap-geoportal"
+  | "basemap-open-street-map"
+  | "basemap-google-satellite"
+  | "basemap-google-road";
 
 const philippinesCenter: [number, number] = [122.5, 12.3];
 const emptyGridCollection: FeatureCollection<Polygon, GridAggregationCellProperties> = {
   type: "FeatureCollection",
   features: [],
 };
+
+const basemapOptions: Array<{
+  id: BasemapId;
+  name: string;
+  source: maplibregl.RasterSourceSpecification;
+}> = [
+  {
+    id: "basemap-geoportal",
+    name: "Philippine Geoportal",
+    source: {
+      type: "raster",
+      tiles: ["https://basemapserver.geoportal.gov.ph/tiles/v2/PGP/{z}/{x}/{y}.png"],
+      tileSize: 256,
+    },
+  },
+  {
+    id: "basemap-open-street-map",
+    name: "Open Street Map",
+    source: {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution:
+        "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+    },
+  },
+  {
+    id: "basemap-google-satellite",
+    name: "Google Satellite",
+    source: {
+      type: "raster",
+      tiles: ["https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"],
+      tileSize: 256,
+    },
+  },
+  {
+    id: "basemap-google-road",
+    name: "Google Road",
+    source: {
+      type: "raster",
+      tiles: ["https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"],
+      tileSize: 256,
+    },
+  },
+];
 
 export interface AOIFeatureProperties {
   id: string;
@@ -73,6 +126,7 @@ export function DatasetMap({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const requestIdRef = useRef(0);
+  const [activeBasemapId, setActiveBasemapId] = useState<BasemapId>("basemap-geoportal");
 
   function hasMapLayers(map: maplibregl.Map) {
     return (
@@ -107,6 +161,20 @@ export function DatasetMap({
     }
   }
 
+  function applyBasemapVisibility(basemapId: BasemapId) {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) {
+      return;
+    }
+
+    for (const basemap of basemapOptions) {
+      const layerId = `${BASEMAP_LAYER_PREFIX}${basemap.id}`;
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, "visibility", basemap.id === basemapId ? "visible" : "none");
+      }
+    }
+  }
+
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
       return;
@@ -116,21 +184,23 @@ export function DatasetMap({
       container: containerRef.current,
       style: {
         version: 8,
-        sources: {
-          osm: {
-            type: "raster",
-            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-            tileSize: 256,
-            attribution: "&copy; OpenStreetMap contributors",
+        sources: Object.fromEntries(
+          basemapOptions.map((basemap) => [
+            basemap.id,
+            basemap.source,
+          ]),
+        ),
+        layers: basemapOptions.map((basemap) => ({
+          id: `${BASEMAP_LAYER_PREFIX}${basemap.id}`,
+          type: "raster" as const,
+          source: basemap.id,
+          layout: {
+            visibility: basemap.id === activeBasemapId ? "visible" : "none",
           },
-        },
-        layers: [
-          {
-            id: "osm",
-            type: "raster",
-            source: "osm",
+          paint: {
+            "raster-opacity": 1,
           },
-        ],
+        })),
       },
       center: philippinesCenter,
       zoom: 5.2,
@@ -454,6 +524,7 @@ export function DatasetMap({
         void refreshGridLayer();
       });
 
+      applyBasemapVisibility(activeBasemapId);
       void refreshGridLayer();
     });
 
@@ -465,6 +536,10 @@ export function DatasetMap({
       mapRef.current = null;
     };
   }, [aoiCollection, datasetCollection, onAoiSelect]);
+
+  useEffect(() => {
+    applyBasemapVisibility(activeBasemapId);
+  }, [activeBasemapId]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -550,5 +625,38 @@ export function DatasetMap({
     }
   }, [focusedAoiId]);
 
-  return <div ref={containerRef} style={{ height: "100%", width: "100%" }} />;
+  return (
+    <Box sx={{ position: "relative", height: "100%", width: "100%" }}>
+      <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
+      <Box
+        sx={{
+          position: "absolute",
+          top: 16,
+          left: 16,
+          zIndex: 2,
+          minWidth: 220,
+          bgcolor: "rgba(255,255,255,0.96)",
+          borderRadius: 2,
+          boxShadow: "0 14px 40px rgba(11,31,58,0.16)",
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        <FormControl fullWidth size="small">
+          <InputLabel id="basemap-selector-label">Basemap</InputLabel>
+          <Select
+            labelId="basemap-selector-label"
+            value={activeBasemapId}
+            label="Basemap"
+            onChange={(event) => setActiveBasemapId(event.target.value as BasemapId)}
+          >
+            {basemapOptions.map((basemap) => (
+              <MenuItem key={basemap.id} value={basemap.id}>
+                {basemap.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
+    </Box>
+  );
 }
