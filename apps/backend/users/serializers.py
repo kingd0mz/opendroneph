@@ -3,7 +3,7 @@ from django.db.models import Max
 from rest_framework import serializers
 
 from datasets.models import AOI, Dataset, DatasetStatus, DatasetType, ValidationStatus
-from users.models import User
+from users.models import Organization, User
 from users.services import user_display_name
 
 
@@ -208,7 +208,7 @@ class OrganizationLeaderboardEntrySerializer(serializers.Serializer):
 
 
 class OrganizationOptionSerializer(serializers.Serializer):
-    organization_name = serializers.CharField(read_only=True)
+    organization_name = serializers.CharField(source="name", read_only=True)
     member_count = serializers.IntegerField(read_only=True)
     is_full = serializers.BooleanField(read_only=True)
 
@@ -216,16 +216,30 @@ class OrganizationOptionSerializer(serializers.Serializer):
 class UpdateOrganizationSerializer(serializers.Serializer):
     organization_name = serializers.CharField(allow_blank=True, max_length=255, trim_whitespace=True)
 
-    def validate_organization_name(self, value):
-        normalized = value.strip()
+    def validate(self, attrs):
+        normalized = attrs["organization_name"].strip()
         user: User = self.context["request"].user
-        if normalized == "":
-            return ""
+        current_organization = user.organization
 
         if normalized == user.organization_name:
-            return normalized
+            attrs["organization_name"] = normalized
+            attrs["organization"] = current_organization
+            return attrs
 
-        member_count = User.objects.filter(organization_name=normalized).exclude(pk=user.pk).count()
-        if member_count >= 50:
-            raise serializers.ValidationError("This organization already has 50 members.")
-        return normalized
+        if current_organization is not None and not current_organization.members.exclude(pk=user.pk).exists():
+            raise serializers.ValidationError(
+                {"organization_name": "You cannot leave an organization that would become empty."}
+            )
+
+        if normalized == "":
+            attrs["organization_name"] = ""
+            attrs["organization"] = None
+            return attrs
+
+        organization = Organization.objects.filter(name=normalized).first()
+        if organization is not None and organization.members.exclude(pk=user.pk).count() >= 50:
+            raise serializers.ValidationError({"organization_name": "This organization already has 50 members."})
+
+        attrs["organization_name"] = normalized
+        attrs["organization"] = organization
+        return attrs

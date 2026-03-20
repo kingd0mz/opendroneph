@@ -15,7 +15,7 @@ from datasets.models import (
     PlatformType,
     ValidationStatus,
 )
-from users.models import User
+from users.models import Organization, User
 
 
 def square_footprint(lng: float, lat: float, size: float = 0.08) -> MultiPolygon:
@@ -50,9 +50,12 @@ class Command(BaseCommand):
             defaults={
                 "is_staff": True,
                 "is_email_verified": True,
-                "organization_name": "PhilSA",
             },
         )
+        moderator_org, _ = Organization.objects.get_or_create(name="PhilSA", defaults={"created_by": moderator})
+        if moderator.organization_id != moderator_org.id:
+            moderator.organization = moderator_org
+            moderator.save(update_fields=["organization", "updated_at"])
         if not moderator.is_staff:
             moderator.is_staff = True
             moderator.save(update_fields=["is_staff"])
@@ -66,9 +69,12 @@ class Command(BaseCommand):
                 email=f"demo-contributor-{index + 1}@opendroneph.local",
                 defaults={
                     "is_email_verified": True,
-                    "organization_name": org_name,
                 },
             )
+            organization, _ = Organization.objects.get_or_create(name=org_name, defaults={"created_by": user})
+            if user.organization_id != organization.id:
+                user.organization = organization
+                user.save(update_fields=["organization", "updated_at"])
             if not user.has_usable_password():
                 user.set_password("demo12345")
                 user.save(update_fields=["password"])

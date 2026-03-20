@@ -1,7 +1,17 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from users.models import User
+from users.models import Organization, User
+
+
+@admin.register(Organization)
+class OrganizationAdmin(admin.ModelAdmin):
+    list_display = ("name", "created_by", "member_count", "created_at")
+    search_fields = ("name", "created_by__email")
+
+    @admin.display(description="Members")
+    def member_count(self, obj):
+        return obj.members.count()
 
 
 @admin.register(User)
@@ -23,7 +33,7 @@ class UserAdmin(DjangoUserAdmin):
         (None, {"fields": ("email", "password")}),
         (
             "Profile",
-            {"fields": ("organization_name", "contribution_count_display", "is_email_verified", "created_at", "updated_at")},
+            {"fields": ("organization", "contribution_count_display", "is_email_verified", "created_at", "updated_at")},
         ),
         (
             "Permissions",
@@ -36,7 +46,7 @@ class UserAdmin(DjangoUserAdmin):
             None,
             {
                 "classes": ("wide",),
-                "fields": ("email", "organization_name", "password1", "password2", "is_email_verified", "is_staff", "is_superuser"),
+                "fields": ("email", "organization", "password1", "password2", "is_email_verified", "is_staff", "is_superuser"),
             },
         ),
     )

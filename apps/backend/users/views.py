@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from datasets.models import Dataset, DatasetStatus, DatasetType, DownloadEvent, ValidationStatus
-from users.models import User
+from users.models import Organization, User
 from users.serializers import (
     LeaderboardEntrySerializer,
     LoginSerializer,
@@ -114,8 +114,12 @@ class UserMeProfileView(APIView):
     def patch(self, request):
         serializer = UpdateOrganizationSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        request.user.organization_name = serializer.validated_data["organization_name"]
-        request.user.save(update_fields=["organization_name", "updated_at"])
+        organization = serializer.validated_data["organization"]
+        organization_name = serializer.validated_data["organization_name"]
+        if organization is None and organization_name:
+            organization = Organization.objects.create(name=organization_name, created_by=request.user)
+        request.user.organization = organization
+        request.user.save(update_fields=["organization", "updated_at"])
         return Response(_user_payload(request.user), status=status.HTTP_200_OK)
 
 
@@ -133,11 +137,10 @@ class OrganizationListView(APIView):
 
     def get(self, request):
         organizations = (
-            User.objects.exclude(organization_name="")
-            .values("organization_name")
-            .annotate(
-                member_count=Count("id"),
+            Organization.objects.annotate(
+                member_count=Count("members", distinct=True),
             )
+            .filter(member_count__gte=1)
             .annotate(
                 is_full=Case(
                     When(member_count__gte=50, then=Value(True)),
@@ -145,7 +148,7 @@ class OrganizationListView(APIView):
                     output_field=BooleanField(),
                 ),
             )
-            .order_by("organization_name")
+            .order_by("name")
         )
         return Response(OrganizationOptionSerializer(organizations, many=True).data, status=status.HTTP_200_OK)
 
@@ -156,17 +159,17 @@ class LeaderboardView(APIView):
     def get(self, request):
         users = User.objects.with_contributions().order_by("-contribution_count", "-jobs_completed_count", "email")[:50]
         published_valid = Q(
-            uploaded_datasets__status=DatasetStatus.PUBLISHED,
-            uploaded_datasets__validation_status=ValidationStatus.VALID,
+            members__uploaded_datasets__status=DatasetStatus.PUBLISHED,
+            members__uploaded_datasets__validation_status=ValidationStatus.VALID,
         )
         organizations = (
-            User.objects.exclude(organization_name="")
-            .values("organization_name")
+            Organization.objects.annotate(member_count=Count("members", distinct=True))
+            .filter(member_count__gte=1)
             .annotate(
                 raw_uploads_count=Coalesce(
                     Count(
-                        "uploaded_datasets",
-                        filter=published_valid & Q(uploaded_datasets__type=DatasetType.RAW),
+                        "members__uploaded_datasets",
+                        filter=published_valid & Q(members__uploaded_datasets__type=DatasetType.RAW),
                         distinct=True,
                     ),
                     Value(0),
@@ -174,8 +177,8 @@ class LeaderboardView(APIView):
                 ),
                 ortho_uploads_count=Coalesce(
                     Count(
-                        "uploaded_datasets",
-                        filter=published_valid & Q(uploaded_datasets__type=DatasetType.ORTHOPHOTO),
+                        "members__uploaded_datasets",
+                        filter=published_valid & Q(members__uploaded_datasets__type=DatasetType.ORTHOPHOTO),
                         distinct=True,
                     ),
                     Value(0),
@@ -183,13 +186,13 @@ class LeaderboardView(APIView):
                 ),
                 jobs_completed_count=Coalesce(
                     Count(
-                        "uploaded_datasets__job",
+                        "members__uploaded_datasets__job",
                         filter=published_valid
-                        & Q(uploaded_datasets__type=DatasetType.ORTHOPHOTO)
-                        & Q(uploaded_datasets__job__isnull=False)
-                        & Q(uploaded_datasets__job__type=DatasetType.RAW)
-                        & Q(uploaded_datasets__job__status=DatasetStatus.PUBLISHED)
-                        & Q(uploaded_datasets__job__validation_status=ValidationStatus.VALID),
+                        & Q(members__uploaded_datasets__type=DatasetType.ORTHOPHOTO)
+                        & Q(members__uploaded_datasets__job__isnull=False)
+                        & Q(members__uploaded_datasets__job__type=DatasetType.RAW)
+                        & Q(members__uploaded_datasets__job__status=DatasetStatus.PUBLISHED)
+                        & Q(members__uploaded_datasets__job__validation_status=ValidationStatus.VALID),
                         distinct=True,
                     ),
                     Value(0),
@@ -197,15 +200,15 @@ class LeaderboardView(APIView):
                 ),
             )
             .annotate(contribution_count=F("raw_uploads_count") + F("ortho_uploads_count") + F("jobs_completed_count"))
-            .order_by("-contribution_count", "-jobs_completed_count", "organization_name")[:50]
+            .order_by("-contribution_count", "-jobs_completed_count", "name")[:50]
         )
         organization_payload = [
             {
-                "organization_name": row["organization_name"],
-                "raw_uploads_count": row["raw_uploads_count"],
-                "ortho_uploads_count": row["ortho_uploads_count"],
-                "jobs_completed_count": row["jobs_completed_count"],
-                "contribution_count": row["contribution_count"],
+                "organization_name": row.name,
+                "raw_uploads_count": row.raw_uploads_count,
+                "ortho_uploads_count": row.ortho_uploads_count,
+                "jobs_completed_count": row.jobs_completed_count,
+                "contribution_count": row.contribution_count,
             }
             for row in organizations
         ]

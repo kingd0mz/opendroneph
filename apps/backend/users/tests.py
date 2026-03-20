@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from datasets.models import AOI, AOIPurpose, Dataset, DatasetAsset, DatasetAssetType, DatasetStatus, DatasetType, LicenseType, PlatformType, ValidationStatus
-from users.models import User
+from users.models import Organization, User
 
 
 @pytest.fixture
@@ -296,26 +296,57 @@ def test_organization_list_excludes_blank_affiliations():
 
 
 @pytest.mark.django_db
-def test_user_can_choose_and_switch_organization():
+def test_creating_an_organization_auto_assigns_creator_as_member():
     user = User.objects.create_user(email="member@example.com", password="testpass123")
+    client = APIClient()
+    client.force_login(user)
+
+    response = client.patch(reverse("user-me"), {"organization_name": "Map Action"}, format="json")
+
+    user.refresh_from_db()
+    organization = Organization.objects.get(name="Map Action")
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["organization_name"] == "Map Action"
+    assert organization.created_by == user
+    assert organization.members.count() == 1
+    assert user.organization == organization
+
+
+@pytest.mark.django_db
+def test_user_can_switch_organizations_when_current_one_keeps_a_member():
+    organization = Organization.objects.create(name="Map Action")
+    user = User.objects.create_user(email="member@example.com", password="testpass123", organization_name="Map Action")
+    User.objects.create_user(email="teammate@example.com", password="testpass123", organization_name="Map Action")
     User.objects.create_user(email="existing@example.com", password="testpass123", organization_name="PhilSA")
     client = APIClient()
     client.force_login(user)
 
-    choose_response = client.patch(reverse("user-me"), {"organization_name": "Map Action"}, format="json")
-    switch_response = client.patch(reverse("user-me"), {"organization_name": "PhilSA"}, format="json")
+    response = client.patch(reverse("user-me"), {"organization_name": "PhilSA"}, format="json")
 
     user.refresh_from_db()
-    assert choose_response.status_code == status.HTTP_200_OK
-    assert choose_response.json()["organization_name"] == "Map Action"
-    assert switch_response.status_code == status.HTTP_200_OK
-    assert switch_response.json()["organization_name"] == "PhilSA"
+    organization.refresh_from_db()
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["organization_name"] == "PhilSA"
     assert user.organization_name == "PhilSA"
+    assert organization.members.count() == 1
+
+
+@pytest.mark.django_db
+def test_sole_member_cannot_leave_organization():
+    user = User.objects.create_user(email="member@example.com", password="testpass123", organization_name="Map Action")
+    client = APIClient()
+    client.force_login(user)
+
+    response = client.patch(reverse("user-me"), {"organization_name": "PhilSA"}, format="json")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()["organization_name"][0] == "You cannot leave an organization that would become empty."
 
 
 @pytest.mark.django_db
 def test_user_cannot_switch_into_full_organization():
-    user = User.objects.create_user(email="newmember@example.com", password="testpass123")
+    user = User.objects.create_user(email="newmember@example.com", password="testpass123", organization_name="Map Action")
+    User.objects.create_user(email="teammate@example.com", password="testpass123", organization_name="Map Action")
     for index in range(50):
         User.objects.create_user(
             email=f"member{index}@example.com",
