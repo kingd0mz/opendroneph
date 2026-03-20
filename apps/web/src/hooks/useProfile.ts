@@ -8,6 +8,7 @@ export function useProfile(userId?: string | null) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -38,7 +39,11 @@ export function useProfile(userId?: string | null) {
     return () => {
       isMounted = false;
     };
-  }, [userId]);
+  }, [reloadKey, userId]);
 
-  return { profile, isLoading, error };
+  function reloadProfile() {
+    setReloadKey((current) => current + 1);
+  }
+
+  return { profile, isLoading, error, reloadProfile };
 }

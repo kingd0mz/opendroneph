@@ -4,7 +4,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from datasets.models import AOI, AOIPurpose, Dataset, DatasetStatus, DatasetType, LicenseType, PlatformType, ValidationStatus
+from datasets.models import AOI, AOIPurpose, Dataset, DatasetAsset, DatasetAssetType, DatasetStatus, DatasetType, LicenseType, PlatformType, ValidationStatus
 from users.models import User
 
 
@@ -127,8 +127,42 @@ def test_user_profile_returns_phase1_stats(footprint):
         "ortho_uploads_count": 1,
         "jobs_completed_count": 1,
     }
+    assert response.json()["current_jobs"] == []
     assert response.json()["completed_jobs"][0]["id"] == str(raw_job.id)
     assert {entry["id"] for entry in response.json()["contributions"]} == {str(raw_job.id), str(ortho.id)}
+
+
+@pytest.mark.django_db
+def test_user_profile_returns_jobs_currently_working_on_from_downloads(footprint, monkeypatch):
+    user = User.objects.create_user(email="worker@example.com", password="testpass123")
+    owner = User.objects.create_user(email="owner@example.com", password="testpass123")
+    raw_job = _create_dataset(
+        user=owner,
+        footprint=footprint,
+        dataset_type=DatasetType.RAW,
+        status_value=DatasetStatus.PUBLISHED,
+        validation_status=ValidationStatus.VALID,
+    )
+    DatasetAsset.objects.create(
+        dataset=raw_job,
+        asset_type=DatasetAssetType.RAW_ARCHIVE,
+        object_key="datasets/raw.zip",
+        content_type="application/zip",
+        size_bytes=100,
+        checksum_sha256="a" * 64,
+        is_downloadable=True,
+        is_renderable_rgb=False,
+    )
+    monkeypatch.setattr("datasets.views.generate_dataset_asset_download_url", lambda **kwargs: "http://example.com/raw.zip")
+
+    client = APIClient()
+    client.force_login(user)
+    download_response = client.get(reverse("dataset-download", args=[raw_job.id]))
+    profile_response = client.get(reverse("user-me"))
+
+    assert download_response.status_code == status.HTTP_200_OK
+    assert profile_response.status_code == status.HTTP_200_OK
+    assert profile_response.json()["current_jobs"][0]["id"] == str(raw_job.id)
 
 
 @pytest.mark.django_db
@@ -243,3 +277,55 @@ def test_leaderboard_is_public(footprint):
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["users"][0]["user_id"] == str(user.id)
+
+
+@pytest.mark.django_db
+def test_organization_list_excludes_blank_affiliations():
+    User.objects.create_user(email="blank@example.com", password="testpass123")
+    User.objects.create_user(email="ph1@example.com", password="testpass123", organization_name="PhilSA")
+    User.objects.create_user(email="ph2@example.com", password="testpass123", organization_name="PhilSA")
+    User.objects.create_user(email="map@example.com", password="testpass123", organization_name="Map Action")
+
+    response = APIClient().get(reverse("organization-list"))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == [
+        {"organization_name": "Map Action", "member_count": 1, "is_full": False},
+        {"organization_name": "PhilSA", "member_count": 2, "is_full": False},
+    ]
+
+
+@pytest.mark.django_db
+def test_user_can_choose_and_switch_organization():
+    user = User.objects.create_user(email="member@example.com", password="testpass123")
+    User.objects.create_user(email="existing@example.com", password="testpass123", organization_name="PhilSA")
+    client = APIClient()
+    client.force_login(user)
+
+    choose_response = client.patch(reverse("user-me"), {"organization_name": "Map Action"}, format="json")
+    switch_response = client.patch(reverse("user-me"), {"organization_name": "PhilSA"}, format="json")
+
+    user.refresh_from_db()
+    assert choose_response.status_code == status.HTTP_200_OK
+    assert choose_response.json()["organization_name"] == "Map Action"
+    assert switch_response.status_code == status.HTTP_200_OK
+    assert switch_response.json()["organization_name"] == "PhilSA"
+    assert user.organization_name == "PhilSA"
+
+
+@pytest.mark.django_db
+def test_user_cannot_switch_into_full_organization():
+    user = User.objects.create_user(email="newmember@example.com", password="testpass123")
+    for index in range(50):
+        User.objects.create_user(
+            email=f"member{index}@example.com",
+            password="testpass123",
+            organization_name="PhilSA",
+        )
+
+    client = APIClient()
+    client.force_login(user)
+    response = client.patch(reverse("user-me"), {"organization_name": "PhilSA"}, format="json")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()["organization_name"][0] == "This organization already has 50 members."

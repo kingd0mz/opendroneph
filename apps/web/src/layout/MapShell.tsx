@@ -1,5 +1,6 @@
-import { AppBar, Avatar, Box, Button, Stack, Toolbar } from "@mui/material";
+import { AppBar, Avatar, Box, Button, IconButton, Menu, MenuItem, Stack, Toolbar } from "@mui/material";
 import type { PropsWithChildren } from "react";
+import { useState } from "react";
 
 import { BRAND_COPY } from "../content/brandCopy";
 import { useAuth } from "../context/AuthContext";
@@ -9,6 +10,7 @@ import { HeaderBrand } from "./HeaderBrand";
 export function MapShell({ children }: PropsWithChildren) {
   const pathname = usePathname();
   const { isAuthenticated, loading, logout, openLoginModal, user } = useAuth();
+  const [avatarMenuAnchor, setAvatarMenuAnchor] = useState<HTMLElement | null>(null);
 
   const links = [
     { label: "Home", to: "/" },
@@ -27,6 +29,7 @@ export function MapShell({ children }: PropsWithChildren) {
   }
 
   async function handleLogout() {
+    setAvatarMenuAnchor(null);
     await logout();
     if (pathname === "/profile" || pathname === "/upload") {
       navigate("/");
@@ -69,42 +72,54 @@ export function MapShell({ children }: PropsWithChildren) {
               </Button>
             ))}
             {isAuthenticated && user ? (
-              <Button
-                onClick={() => handleNavigate("/profile")}
-                color="inherit"
-                variant={pathname === "/profile" ? "outlined" : "text"}
-                sx={{
-                  minWidth: 0,
-                  borderColor: "rgba(255,255,255,0.34)",
-                  color: "common.white",
-                  p: 0.5,
-                  borderRadius: 999,
-                }}
-              >
-                <Avatar
+              <>
+                <IconButton
+                  onClick={(event) => setAvatarMenuAnchor(event.currentTarget)}
+                  color="inherit"
+                  aria-label="Open profile menu"
+                  aria-controls={avatarMenuAnchor ? "profile-menu" : undefined}
+                  aria-haspopup="true"
+                  aria-expanded={avatarMenuAnchor ? "true" : undefined}
                   sx={{
-                    width: 34,
-                    height: 34,
-                    bgcolor: "#F2C94C",
-                    color: "#0B1F3A",
-                    fontWeight: 800,
-                    fontSize: "0.95rem",
+                    border: pathname === "/profile" ? "1px solid rgba(255,255,255,0.34)" : "1px solid transparent",
+                    color: "common.white",
+                    p: 0.5,
                   }}
                 >
-                  {user.email.slice(0, 1).toUpperCase()}
-                </Avatar>
-              </Button>
+                  <Avatar
+                    sx={{
+                      width: 34,
+                      height: 34,
+                      bgcolor: "#F2C94C",
+                      color: "#0B1F3A",
+                      fontWeight: 800,
+                      fontSize: "0.95rem",
+                    }}
+                  >
+                    {user.email.slice(0, 1).toUpperCase()}
+                  </Avatar>
+                </IconButton>
+                <Menu
+                  id="profile-menu"
+                  anchorEl={avatarMenuAnchor}
+                  open={!!avatarMenuAnchor}
+                  onClose={() => setAvatarMenuAnchor(null)}
+                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                  transformOrigin={{ vertical: "top", horizontal: "right" }}
+                >
+                  <MenuItem
+                    onClick={() => {
+                      setAvatarMenuAnchor(null);
+                      handleNavigate("/profile");
+                    }}
+                  >
+                    Profile
+                  </MenuItem>
+                  <MenuItem onClick={() => void handleLogout()}>Logout</MenuItem>
+                </Menu>
+              </>
             ) : null}
-            {loading ? null : isAuthenticated ? (
-              <Button
-                onClick={() => void handleLogout()}
-                color="inherit"
-                variant="text"
-                sx={{ color: "common.white", fontWeight: 700 }}
-              >
-                Logout
-              </Button>
-            ) : (
+            {loading ? null : isAuthenticated ? null : (
               <Button
                 onClick={() => openLoginModal()}
                 color="inherit"

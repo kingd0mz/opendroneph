@@ -1,7 +1,9 @@
 from django.contrib.auth import authenticate
+from django.db.models import Max
 from rest_framework import serializers
 
 from datasets.models import AOI, Dataset, DatasetStatus, DatasetType, ValidationStatus
+from users.models import User
 from users.services import user_display_name
 
 
@@ -47,6 +49,22 @@ class CompletedJobSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class WorkingJobSerializer(serializers.ModelSerializer):
+    last_activity_at = serializers.DateTimeField(read_only=True)
+
+    class Meta:
+        model = Dataset
+        fields = [
+            "id",
+            "title",
+            "status",
+            "validation_status",
+            "created_at",
+            "last_activity_at",
+        ]
+        read_only_fields = fields
+
+
 class UserAOISerializer(serializers.ModelSerializer):
     class Meta:
         model = AOI
@@ -77,6 +95,7 @@ class UserProfileSerializer(serializers.Serializer):
     contributions = serializers.SerializerMethodField()
     uploaded_datasets = serializers.SerializerMethodField()
     completed_jobs = serializers.SerializerMethodField()
+    current_jobs = serializers.SerializerMethodField()
     aois_contributed_to = serializers.SerializerMethodField()
 
     def get_username(self, obj):
@@ -126,6 +145,34 @@ class UserProfileSerializer(serializers.Serializer):
             ).distinct().order_by("-created_at")
         return CompletedJobSerializer(completed_jobs, many=True).data
 
+    def get_current_jobs(self, obj):
+        events = getattr(obj, "raw_job_download_events", None)
+        if events is not None:
+            seen_job_ids = set()
+            working_jobs = []
+            for event in events:
+                dataset = event.dataset
+                if dataset_id := getattr(dataset, "id", None):
+                    if dataset_id in seen_job_ids:
+                        continue
+                    seen_job_ids.add(dataset_id)
+                    dataset.last_activity_at = event.created_at
+                    working_jobs.append(dataset)
+            return WorkingJobSerializer(working_jobs, many=True).data
+
+        working_jobs = (
+            Dataset.objects.filter(
+                type=DatasetType.RAW,
+                status=DatasetStatus.PUBLISHED,
+                validation_status=ValidationStatus.VALID,
+                download_events__actor=obj,
+            )
+            .annotate(last_activity_at=Max("download_events__created_at"))
+            .order_by("-last_activity_at")
+            .distinct()
+        )
+        return WorkingJobSerializer(working_jobs, many=True).data
+
     def get_aois_contributed_to(self, obj):
         aois = getattr(obj, "public_aois", None)
         if aois is None:
@@ -158,3 +205,27 @@ class OrganizationLeaderboardEntrySerializer(serializers.Serializer):
     jobs_completed_count = serializers.IntegerField(read_only=True)
     contribution_count = serializers.IntegerField(read_only=True)
     points = serializers.IntegerField(source="contribution_count", read_only=True)
+
+
+class OrganizationOptionSerializer(serializers.Serializer):
+    organization_name = serializers.CharField(read_only=True)
+    member_count = serializers.IntegerField(read_only=True)
+    is_full = serializers.BooleanField(read_only=True)
+
+
+class UpdateOrganizationSerializer(serializers.Serializer):
+    organization_name = serializers.CharField(allow_blank=True, max_length=255, trim_whitespace=True)
+
+    def validate_organization_name(self, value):
+        normalized = value.strip()
+        user: User = self.context["request"].user
+        if normalized == "":
+            return ""
+
+        if normalized == user.organization_name:
+            return normalized
+
+        member_count = User.objects.filter(organization_name=normalized).exclude(pk=user.pk).count()
+        if member_count >= 50:
+            raise serializers.ValidationError("This organization already has 50 members.")
+        return normalized

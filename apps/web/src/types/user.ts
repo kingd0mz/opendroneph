@@ -17,6 +17,15 @@ export interface CompletedJob {
   created_at: string;
 }
 
+export interface WorkingJob {
+  id: string;
+  title: string;
+  status: string;
+  validation_status: string;
+  created_at: string;
+  last_activity_at: string;
+}
+
 export interface UserStats {
   raw_uploads_count: number;
   ortho_uploads_count: number;
@@ -37,12 +46,20 @@ export interface UserProfile {
   username: string;
   organization_name: string;
   contribution_count: number;
+  points: number;
   dataset_count: number;
   stats: UserStats;
   contributions: UserContribution[];
   uploaded_datasets: UserContribution[];
   completed_jobs: CompletedJob[];
+  current_jobs: WorkingJob[];
   aois_contributed_to: AOISummary[];
+}
+
+export interface OrganizationOption {
+  organization_name: string;
+  member_count: number;
+  is_full: boolean;
 }
 
 export interface LeaderboardEntry {

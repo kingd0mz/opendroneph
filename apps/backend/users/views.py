@@ -1,5 +1,5 @@
 from django.contrib.auth import login, logout
-from django.db.models import Count, F, IntegerField, Prefetch, Q, Value
+from django.db.models import BooleanField, Case, Count, F, IntegerField, Prefetch, Q, Value, When
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -9,12 +9,14 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from datasets.models import Dataset, DatasetStatus, DatasetType, ValidationStatus
+from datasets.models import Dataset, DatasetStatus, DatasetType, DownloadEvent, ValidationStatus
 from users.models import User
 from users.serializers import (
     LeaderboardEntrySerializer,
     LoginSerializer,
+    OrganizationOptionSerializer,
     OrganizationLeaderboardEntrySerializer,
+    UpdateOrganizationSerializer,
     UserProfileSerializer,
 )
 
@@ -51,6 +53,17 @@ def _profile_queryset():
             .select_related("job")
             .order_by("-created_at"),
             to_attr="public_completed_job_outputs",
+        ),
+        Prefetch(
+            "download_events",
+            queryset=DownloadEvent.objects.filter(
+                dataset__type=DatasetType.RAW,
+                dataset__status=DatasetStatus.PUBLISHED,
+                dataset__validation_status=ValidationStatus.VALID,
+            )
+            .select_related("dataset")
+            .order_by("-created_at"),
+            to_attr="raw_job_download_events",
         ),
     )
 
@@ -98,6 +111,13 @@ class UserMeProfileView(APIView):
         serializer = UserProfileSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    def patch(self, request):
+        serializer = UpdateOrganizationSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        request.user.organization_name = serializer.validated_data["organization_name"]
+        request.user.save(update_fields=["organization_name", "updated_at"])
+        return Response(_user_payload(request.user), status=status.HTTP_200_OK)
+
 
 class UserProfileView(APIView):
     permission_classes = [AllowAny]
@@ -106,6 +126,28 @@ class UserProfileView(APIView):
         user = get_object_or_404(_profile_queryset(), pk=user_id)
         serializer = UserProfileSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class OrganizationListView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        organizations = (
+            User.objects.exclude(organization_name="")
+            .values("organization_name")
+            .annotate(
+                member_count=Count("id"),
+            )
+            .annotate(
+                is_full=Case(
+                    When(member_count__gte=50, then=Value(True)),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                ),
+            )
+            .order_by("organization_name")
+        )
+        return Response(OrganizationOptionSerializer(organizations, many=True).data, status=status.HTTP_200_OK)
 
 
 class LeaderboardView(APIView):
