@@ -272,3 +272,14 @@ export interface AOIDatasets {
   rawDatasets: DatasetDetail[];
   orthophotos: DatasetDetail[];
 }
+
+export interface GridAggregationCellProperties {
+  id: string;
+  count: number;
+}
+
+export interface GridAggregationResponse {
+  zoom_band: "low" | "mid" | "high";
+  cell_size_degrees: number | null;
+  grid_cells: GeoJSON.FeatureCollection<GeoJSON.Polygon, GridAggregationCellProperties>;
+}

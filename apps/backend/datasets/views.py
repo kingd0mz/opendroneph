@@ -1,9 +1,11 @@
+import json
 import hashlib
 import mimetypes
 import os
 import tempfile
 from uuid import uuid4
 
+from django.db import connection
 from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -38,6 +40,9 @@ from datasets.serializers import (
 )
 from datasets.services.storage import generate_dataset_asset_download_url, upload_dataset_asset
 from datasets.services.validation import validate_ph_boundary_intersection, validate_strict_cog
+
+
+DEFAULT_GRID_BBOX = (116.0, 4.0, 127.0, 21.5)
 
 
 class IsModerator(BasePermission):
@@ -144,6 +149,117 @@ def _aoi_queryset():
             distinct=True,
         ),
     ).order_by("-is_active", "title")
+
+
+def _grid_cell_size_for_zoom(zoom: float) -> float | None:
+    if zoom <= 6:
+        return 1.0
+    if zoom <= 10:
+        return 0.2
+    return None
+
+
+def _parse_bbox_param(raw_bbox: str | None):
+    if not raw_bbox:
+        return DEFAULT_GRID_BBOX
+
+    try:
+        west, south, east, north = [float(value) for value in raw_bbox.split(",")]
+    except (TypeError, ValueError):
+        return None
+
+    if west >= east or south >= north:
+        return None
+
+    return west, south, east, north
+
+
+def _grid_aggregation_feature_collection(*, bbox: tuple[float, float, float, float], zoom: float):
+    cell_size = _grid_cell_size_for_zoom(zoom)
+    if cell_size is None:
+        return {
+            "zoom_band": "high",
+            "cell_size_degrees": None,
+            "grid_cells": {
+                "type": "FeatureCollection",
+                "features": [],
+            },
+        }
+
+    zoom_band = "low" if zoom <= 6 else "mid"
+    west, south, east, north = bbox
+    dataset_table = Dataset._meta.db_table
+
+    query = f"""
+        WITH visible AS (
+            SELECT
+                ST_Centroid(footprint) AS centroid
+            FROM {dataset_table}
+            WHERE status = %s
+              AND validation_status = %s
+              AND ST_Intersects(footprint, ST_MakeEnvelope(%s, %s, %s, %s, 4326))
+        ),
+        bucketed AS (
+            SELECT
+                floor((ST_X(centroid) - %s) / %s) * %s + %s AS grid_x,
+                floor((ST_Y(centroid) - %s) / %s) * %s + %s AS grid_y,
+                COUNT(*)::integer AS dataset_count
+            FROM visible
+            GROUP BY 1, 2
+        )
+        SELECT
+            ST_AsGeoJSON(
+                ST_MakeEnvelope(grid_x, grid_y, grid_x + %s, grid_y + %s, 4326)
+            ) AS geometry,
+            dataset_count
+        FROM bucketed
+        ORDER BY dataset_count DESC, grid_y DESC, grid_x ASC
+    """
+
+    params = [
+        DatasetStatus.PUBLISHED,
+        ValidationStatus.VALID,
+        west,
+        south,
+        east,
+        north,
+        west,
+        cell_size,
+        cell_size,
+        west,
+        south,
+        cell_size,
+        cell_size,
+        south,
+        cell_size,
+        cell_size,
+    ]
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+    features = []
+    for index, (geometry_json, dataset_count) in enumerate(rows):
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": json.loads(geometry_json),
+                "properties": {
+                    "id": f"{zoom_band}-{index}",
+                    "count": dataset_count,
+                },
+            }
+        )
+
+    return {
+        "zoom_band": zoom_band,
+        "cell_size_degrees": cell_size,
+        "grid_cells": {
+            "type": "FeatureCollection",
+            "features": features,
+        },
+    }
 
 
 class DatasetViewSet(viewsets.ModelViewSet):
@@ -366,6 +482,22 @@ class JobListView(APIView):
 
         serializer = JobListDatasetSerializer(jobs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class GridAggregationView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        try:
+            zoom = float(request.query_params.get("zoom", "5"))
+        except ValueError:
+            return Response({"detail": "Invalid zoom parameter."}, status=status.HTTP_400_BAD_REQUEST)
+
+        bbox = _parse_bbox_param(request.query_params.get("bbox"))
+        if bbox is None:
+            return Response({"detail": "Invalid bbox parameter."}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(_grid_aggregation_feature_collection(bbox=bbox, zoom=zoom), status=status.HTTP_200_OK)
 
 
 class AOIListView(APIView):

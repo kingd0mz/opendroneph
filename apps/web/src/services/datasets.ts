@@ -15,6 +15,7 @@ import type {
   DatasetDownloadResult,
   DatasetFlag,
   DatasetReference,
+  GridAggregationResponse,
   Job,
   JobApiItem,
   MissionSummary,
@@ -233,4 +234,14 @@ export async function fetchAoiDatasets(aoiId: string): Promise<AOIDatasets> {
     rawDatasets: response.data.raw_datasets.map(normalizeDatasetDetail),
     orthophotos: response.data.orthophotos.map(normalizeDatasetDetail),
   };
+}
+
+export async function fetchGridAggregations(zoom: number, bbox: [number, number, number, number]): Promise<GridAggregationResponse> {
+  const response = await api.get<GridAggregationResponse>("/grid-aggregations/", {
+    params: {
+      zoom,
+      bbox: bbox.join(","),
+    },
+  });
+  return response.data;
 }

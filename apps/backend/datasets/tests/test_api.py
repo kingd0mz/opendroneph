@@ -427,3 +427,40 @@ def test_upload_valid_orthophoto_keeps_linked_job_in_detail(api_client, uploader
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["job"]["id"] == str(raw_job.id)
+
+
+@pytest.mark.django_db
+def test_grid_aggregations_return_low_zoom_cells(api_client, uploader, inside_ph_footprint):
+    _make_dataset(owner=uploader, footprint=inside_ph_footprint, dataset_type=DatasetType.RAW, title="RAW job")
+    _make_dataset(owner=uploader, footprint=inside_ph_footprint, dataset_type=DatasetType.ORTHOPHOTO, title="Ortho")
+
+    response = api_client.get(
+        reverse("grid-aggregations"),
+        {
+            "zoom": "5",
+            "bbox": "120,14,122,15",
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert payload["zoom_band"] == "low"
+    assert payload["cell_size_degrees"] == 1.0
+    assert payload["grid_cells"]["type"] == "FeatureCollection"
+    assert payload["grid_cells"]["features"][0]["geometry"]["type"] == "Polygon"
+    assert payload["grid_cells"]["features"][0]["properties"]["count"] == 2
+
+
+@pytest.mark.django_db
+def test_grid_aggregations_return_empty_feature_collection_at_high_zoom(api_client):
+    response = api_client.get(
+        reverse("grid-aggregations"),
+        {
+            "zoom": "12",
+            "bbox": "120,14,122,15",
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["zoom_band"] == "high"
+    assert response.json()["grid_cells"]["features"] == []
